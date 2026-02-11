@@ -281,13 +281,14 @@ choices <- dat |>
                                 goal=='long' & choice!=long_s ~ 0 ,
                                 goal=='short' & choice==short_s ~ 1 ,
                                 goal=='short' & choice!=short_s ~ 0
-                                )
+                                ) , 
+    problem_type = long==short
     ) |> 
   select(
     study, participant, part_short, age, gender, goal, complexity, mouse, training, phase, 
-    trial, problem, 
-    switch_rate, choice, correct_ground, correct_sampled , 
-    long, short, 
+    trial, problem,
+    smp_total, switch_total, switch_rate, choice, correct_ground, correct_sampled , 
+    long, short, problem_type,
     long_s, short_s
     )
 write_csv(choices, 'data/clean/choices.csv')
