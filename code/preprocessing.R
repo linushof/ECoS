@@ -302,5 +302,5 @@ problems <- dat |>
          o1_p1:o2_3, 
          o1_ev, o2_ev, long,
          o1_rwp, o2_rwp, short) 
-write_csv(choices, 'data/clean/problems.csv')
+write_csv(problems, 'data/clean/problems.csv')
 

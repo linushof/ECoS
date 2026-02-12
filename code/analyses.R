@@ -4,6 +4,7 @@
 pacman::p_load(tidyverse, brms, posterior, tidybayes, scico, patchwork)
 
 # load data
+problems <- read_csv('data/clean/problems.csv')
 choices <- read_csv('data/clean/choices.csv') |> 
   filter(!participant %in% c('618_4_1', '618_6_20')) # participants did not follow the instructions
 
@@ -11,7 +12,10 @@ s1_choices <- choices |> filter(study=='s1')
 s2_choices <- choices |> filter(study=='s2')
 s3_choices <- choices |> filter(study=='s3')
 
-# participants ------------------------------------------------------------
+
+# method and materials -----------------------------------------------------------------
+
+## participants ------------------------------------------------------------
 
 participants <- choices |> 
   distinct(study, part_short, .keep_all = T) |> 
@@ -29,6 +33,30 @@ participants |>
             enby = sum(gender=='enby', na.rm=T) , 
             na = sum(is.na(gender))
             )
+
+## problems ----------------------------------------------------------------
+
+problems |> 
+  pivot_longer(cols = o1_p1:o2_3 , 
+               values_to = 'value',
+               names_to = 'feature') |> 
+  separate_wider_delim(
+    feature, delim = '_' ,
+    names = c('option', 'feature')
+  ) |> 
+  mutate(number = str_extract(feature, '\\d'), 
+         feature = if_else(str_detect(feature, 'p'),'probability', 'outcome')) |> 
+  pivot_wider(names_from = feature, values_from = value) |> 
+  filter(study=='s1', probability!=0) |> 
+  summarise(min_out = min(outcome),
+            max_out = max(outcome),
+  )
+
+
+## misc --------------------------------------------------------------------
+
+choices |> filter(study=='s1') |> nrow() # 7320
+sampling |> filter(study=='s1') |> nrow() # 7320
 
 # M1: Switch effect -----------------------------------------------------------
 
