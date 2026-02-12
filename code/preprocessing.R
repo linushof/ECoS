@@ -293,3 +293,14 @@ choices <- dat |>
     )
 write_csv(choices, 'data/clean/choices.csv')
 
+
+# problems ----------------------------------------------------------------
+
+problems <- dat |> 
+  distinct(problem, .keep_all = T) |> 
+  select(study, problem, complexity, 
+         o1_p1:o2_3, 
+         o1_ev, o2_ev, long,
+         o1_rwp, o2_rwp, short) 
+write_csv(choices, 'data/clean/problems.csv')
+

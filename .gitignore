@@ -1,0 +1,19 @@
+# data formats
+*.log
+*.out
+*.blg
+*.bcf
+*.bbl
+*.aux
+*run.xml
+*.synctex.gz
+
+# folders
+manuscript/figures
+data/raw/
+
+# misc
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
