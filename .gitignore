@@ -11,7 +11,8 @@
 # folders
 manuscript/
 data/raw/
-legacy
+legacy/
+code/misc/
 
 # misc
 .Rproj.user
