@@ -9,8 +9,9 @@
 *.synctex.gz
 
 # folders
-manuscript/figures
+manuscript/
 data/raw/
+legacy
 
 # misc
 .Rproj.user
