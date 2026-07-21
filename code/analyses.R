@@ -1,94 +1,44 @@
 # prep --------------------------------------------------------------------
 
-# load packages
+## packages ----------------------------------------------------------------
+
 pacman::p_load(tidyverse,
                brms, posterior, tidybayes, # Bayes
                scico, patchwork, # plotting
                knitr # tables
                )
 
-# load and split data
-problems <- read_csv('data/clean/problems.csv')
-choices <- read_csv('data/clean/choices.csv') |> 
-  filter(!participant %in% c('618_4_1', '618_6_20'))   # participants did not follow the instructions
-sampling <- read_csv('data/clean/sampling.csv') |> 
-  filter(!participant %in% c('618_4_1', '618_6_20'))
 
+## data --------------------------------------------------------------------
+
+participants_to_exclude <- c('618_4_1', '618_6_20') # did not follow the instructions
+
+problems <- read_csv('data/clean/problems.csv')
+
+sampling <- read_csv('data/clean/sampling.csv') |> 
+  filter(!participant %in% participants_to_exclude)
+
+choices <- read_csv('data/clean/choices.csv') |> 
+  filter(!participant %in% participants_to_exclude) 
 
 s1_choices <- choices |> filter(study=='s1')
 s2_choices <- choices |> filter(study=='s2')
 s3_choices <- choices |> filter(study=='s3')
 
-# plots
+
+## plotting ----------------------------------------------------------------
+
 two_cols <- scico(n=2, begin = .1, end=.9, palette = 'managua')
 
 
-# method and materials -----------------------------------------------------------------
-
-## participants ------------------------------------------------------------
-
-participants <- choices |> 
-  distinct(study, part_short, .keep_all = T) |> 
-  select(study:training)
-
-participants |> 
-  group_by(study) |> 
-  summarise(n = n(), 
-            age.mean = mean(age, na.rm=TRUE) ,
-            age.sd = sd(age, na.rm=TRUE) ,
-            age.lower = range(age, na.rm=TRUE)[1] , 
-            age.upper = range(age, na.rm=TRUE)[2] , 
-            women = sum(gender=='w', na.rm = T) , 
-            men = sum(gender=='m', na.rm=T) , 
-            enby = sum(gender=='enby', na.rm=T) , 
-            na = sum(is.na(gender))
-            )
-
-## problems ----------------------------------------------------------------
-
-# get outcome range
-problems |> 
-  pivot_longer(cols = o1_p1:o2_3 , 
-               values_to = 'value',
-               names_to = 'feature') |> 
-  separate_wider_delim(
-    feature, delim = '_' ,
-    names = c('option', 'feature')
-  ) |> 
-  mutate(number = str_extract(feature, '\\d'), 
-         feature = if_else(str_detect(feature, 'p'),'probability', 'outcome')) |> 
-  pivot_wider(names_from = feature, values_from = value) |> 
-  filter(study=='s1', probability!=0) |> 
-  summarise(min_out = min(outcome),
-            max_out = max(outcome),
-  )
-
-
-## misc --------------------------------------------------------------------
-
-n_choices <- choices |> filter(study=='s1') |> nrow() # 7320
-n_samples <- sampling |> filter(study=='s1') |> nrow() # 163573
-
-# Switch effects (Binomial) -----------------------------------------------------------
+# M1: Switch effects (Binomial) -----------------------------------------------------------
 'Notes:
 - compare to models with random slopes
 '
-## Exp. 1 -----------------------------------------------------------------
-
-# data
-s1_m1_dat <- list(
-  PART = as.factor(s1_choices$part_short) , 
-  PROB = as.factor(s1_choices$problem) , 
-  PROB_T = s1_choices$problem_type , 
-  G = as.factor(s1_choices$goal) ,
-  S = as.double(scale(s1_choices$switch_rate)) , 
-  C = s1_choices$correct_ground
-)
-
 
 # priors
 
-s1_m1_prior <- 
+m1_prior <- 
   # fixed effects
   ## intercepts
   prior(student_t(3,.75,.5), class = 'Intercept') + # intercept long-term (diff)
@@ -104,6 +54,48 @@ s1_m1_prior <-
 # PROB_T is to distinguish problems where long- and short-term are same/different
 m1_f <- bf(C ~ 1 + G*S*PROB_T + (1|PART) + (1|PROB)) 
 
+
+make_posts_m1 <- function(m1_fit){
+  m1_fit |> 
+    spread_draws(
+      b_Intercept, b_S, b_Gshort, b_PROB_TTRUE, # main effects
+      `b_Gshort:S` , `b_S:PROB_TTRUE` ,  `b_Gshort:PROB_TTRUE` , # 2-way interaction
+      `b_Gshort:S:PROB_TTRUE`,  # 3-way interaction
+      `sd_PROB__Intercept` , 
+      `sd_PART__Intercept`
+    )  |> 
+    rename(beta_0 = b_Intercept , 
+           beta_1 = b_Gshort ,
+           beta_2 = b_S , 
+           beta_3 = `b_Gshort:S` , 
+           beta_4 = b_PROB_TTRUE , 
+           beta_5 = `b_Gshort:PROB_TTRUE` , 
+           beta_6 = `b_S:PROB_TTRUE` , 
+           beta_7 = `b_Gshort:S:PROB_TTRUE` ,
+           sigma_u = `sd_PROB__Intercept` , 
+           sigma_v = `sd_PART__Intercept`
+    ) |> 
+    mutate(beta_long = beta_2 , 
+           beta_short = beta_2 + beta_3 , 
+           beta_delta = beta_3) |> 
+    select(beta_long, beta_short, beta_delta, beta_0, beta_1, beta_2, beta_3, beta_4, beta_5, beta_6, beta_7, sigma_u:sigma_v) 
+  
+}
+
+
+## Exp. 1 -----------------------------------------------------------------
+
+# data
+s1_m1_dat <- list(
+  PART = as.factor(s1_choices$part_short) , 
+  PROB = as.factor(s1_choices$problem) , 
+  PROB_T = s1_choices$problem_type , 
+  G = as.factor(s1_choices$goal) ,
+  S = as.double(scale(s1_choices$switch_rate)) , 
+  C = s1_choices$correct_ground
+)
+
+
 s1_m1 <- brm(m1_f , 
              data=s1_m1_dat , 
              prior = s1_m1_prior ,
@@ -116,65 +108,11 @@ s1_m1 <- brm(m1_f ,
              file='fits/s1_m1'
              )
 
-# test <- conditional_effects(
-#   s1_m1, effects = "S:G",
-#   conditions = make_conditions(s1_m1, "PROB_T")
-# )
+s1_m1_posts <- make_posts_m1(s1_m1)
 
-variables(s1_m1)
-s1_m1_posts <-  s1_m1 |>  
-  spread_draws(
-    b_Intercept, b_S, b_Gshort, b_PROB_TTRUE, # main effects
-    `b_Gshort:S` , `b_S:PROB_TTRUE` ,  `b_Gshort:PROB_TTRUE` , # 2-way interaction
-    `b_Gshort:S:PROB_TTRUE`,  # 3-way interaction
-    `sd_PROB__Intercept` , 
-    `sd_PART__Intercept`
-    )  |> 
-  rename(beta_0 = b_Intercept , 
-         beta_1 = b_Gshort ,
-         beta_2 = b_S , 
-         beta_3 = `b_Gshort:S` , 
-         beta_4 = b_PROB_TTRUE , 
-         beta_5 = `b_Gshort:PROB_TTRUE` , 
-         beta_6 = `b_S:PROB_TTRUE` , 
-         beta_7 = `b_Gshort:S:PROB_TTRUE` ,
-         sigma_u = `sd_PROB__Intercept` , 
-         sigma_v = `sd_PART__Intercept`
-         ) |> 
-  mutate(
-    beta_long = beta_2 , # long-term goal, different from short-term
-    beta_short = beta_2 + beta_3
-    #beta_0_long_C0 = beta_0 
-    #beta_0_short_C0 = beta_0 + beta_1 ,
-    #beta_0_long_C1 = beta_0 + beta_4 , 
-    #beta_0_short_C1 = beta_0 + beta_1 + beta_4 + beta_5 ,
-    #beta_1_long_C0 = beta_2 
-    #beta_1_short_C0 = beta_2 + beta_3 ,
-    #beta_1_long_C1 = beta_2 + beta_6 , 
-    #beta_1_short_C1 = beta_2 + beta_3 + beta_6 + beta_7 
-  ) |> 
-  select(beta_long, beta_short, beta_0, beta_1, beta_2, beta_3, beta_4, beta_5, beta_6, beta_7, sigma_u:sigma_v)
-
-s1_m1_effects <- summarise_draws(s1_m1_posts, 
-                                 'mean', 
-                                 ~quantile(.x, probs = 0.025),
-                                 ~quantile(.x, probs = 0.975),
-                                 'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
-  rename(Coefficient = variable , 
-         Mean = mean ,
-         Median = median , 
-         SD = sd ,
-         R = rhat ,
-         ESS_bulk = ess_bulk , 
-         ESS_tail = ess_tail)
-
-kable(s1_m1_effects, format = "latex", booktabs = TRUE, digits = 2,
-      caption = "Study 1 Posterior Summaries of the Logistic Regression Model")
 
 
 ## Exp. 2 -----------------------------------------------------------------
-
-### without updating -----------------------------------------------------------
 
 s2_m1_dat <- list(
   PART = as.factor(s2_choices$part_short) , 
@@ -187,7 +125,7 @@ s2_m1_dat <- list(
 
 s2_m1 <- brm(m1_f ,
              data=s2_m1_dat ,
-             prior = s1_m1_prior ,
+             prior = m1_prior ,
              family = bernoulli(link = "logit") ,
              iter = 2000 ,
              warmup = 1000 ,
@@ -197,115 +135,16 @@ s2_m1 <- brm(m1_f ,
              file='fits/s2_m1'
 )
 
-summary(s2_m1)
 
-s2_m1_posts <-  s2_m1 |>  
-  spread_draws(
-    b_Intercept, b_S, b_Gshort, b_PROB_TTRUE, # main effects
-    `b_Gshort:S` , `b_S:PROB_TTRUE` ,  `b_Gshort:PROB_TTRUE` , # 2-way interaction
-    `b_Gshort:S:PROB_TTRUE`,  # 3-way interaction
-    `sd_PROB__Intercept` , 
-    `sd_PART__Intercept`
-  )  |> 
-  rename(beta_0 = b_Intercept , 
-         beta_1 = b_Gshort ,
-         beta_2 = b_S , 
-         beta_3 = `b_Gshort:S` , 
-         beta_4 = b_PROB_TTRUE , 
-         beta_5 = `b_Gshort:PROB_TTRUE` , 
-         beta_6 = `b_S:PROB_TTRUE` , 
-         beta_7 = `b_Gshort:S:PROB_TTRUE` ,
-         sigma_u = `sd_PROB__Intercept` , 
-         sigma_v = `sd_PART__Intercept`
-  ) |> 
-  mutate(
-    beta_long = beta_2 ,
-    beta_short = beta_2 + beta_3
-  ) |> 
-  select(beta_long, beta_short, beta_0, beta_1, beta_2, beta_3, beta_4, beta_5, beta_6, beta_7, sigma_u:sigma_v)
-
-s2_m1_effects <- summarise_draws(s2_m1_posts, 
-                                 'mean', 
-                                 ~quantile(.x, probs = 0.025),
-                                 ~quantile(.x, probs = 0.975),
-                                 'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
-  rename(Coefficient = variable , 
-         Mean = mean ,
-         Median = median , 
-         SD = sd ,
-         R = rhat ,
-         ESS_bulk = ess_bulk , 
-         ESS_tail = ess_tail)
-
-kable(s2_m1_effects, format = "latex", booktabs = TRUE, digits = 2,
-      caption = "Study 2 Posterior Summaries of the Logistic Regression Model")
+s2_m1_posts <- make_posts_m1(s2_m1)
 
 
-### with updating -----------------------------------------------------------
 
-s2_m1_dat_up <- Map(c, s1_m1_dat, s2_m1_dat)
-  
-s2_m1_up <- brm(m1_f , 
-             data=s2_m1_dat_up , 
-             prior = s1_m1_prior ,
-             family = bernoulli(link = "logit") ,
-             iter = 2000 ,
-             warmup = 1000 ,
-             chains = 6  ,
-             cores = 6 ,
-             save_pars = save_pars(all=T) ,
-             file='fits/s2_m1_up'
-)
-
-summary(s2_m1_up)
-
-s2_m1_up_posts <-  s2_m1_up |>  
-  spread_draws(
-    b_Intercept, b_S, b_Gshort, b_PROB_TTRUE, # main effects
-    `b_Gshort:S` , `b_S:PROB_TTRUE` ,  `b_Gshort:PROB_TTRUE` , # 2-way interaction
-    `b_Gshort:S:PROB_TTRUE`,  # 3-way interaction
-    `sd_PROB__Intercept` , 
-    `sd_PART__Intercept`
-  )  |> 
-  rename(beta_0 = b_Intercept , 
-         beta_1 = b_Gshort ,
-         beta_2 = b_S , 
-         beta_3 = `b_Gshort:S` , 
-         beta_4 = b_PROB_TTRUE , 
-         beta_5 = `b_Gshort:PROB_TTRUE` , 
-         beta_6 = `b_S:PROB_TTRUE` , 
-         beta_7 = `b_Gshort:S:PROB_TTRUE` ,
-         sigma_u = `sd_PROB__Intercept` , 
-         sigma_v = `sd_PART__Intercept`
-  ) |> 
-  mutate(
-    beta_long = beta_2 ,
-    beta_short = beta_2 + beta_3
-  ) |> 
-  select(beta_long, beta_short, beta_0, beta_1, beta_2, beta_3, beta_4, beta_5, beta_6, beta_7, sigma_u:sigma_v)
-
-s2_m1_up_effects <- summarise_draws(s2_m1_up_posts, 
-                                 'mean', 
-                                 ~quantile(.x, probs = 0.025),
-                                 ~quantile(.x, probs = 0.975),
-                                 'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
-  rename(Coefficient = variable , 
-         Mean = mean ,
-         Median = median , 
-         SD = sd ,
-         R = rhat ,
-         ESS_bulk = ess_bulk , 
-         ESS_tail = ess_tail)
-
-kable(s2_m1_up_effects, format = "latex", booktabs = TRUE, digits = 2,
-      caption = "Study 2 Posterior Summaries (Updated) of the Logistic Regression Model")
 
 ## Exp. 3 ------------------------------------------------------------
 'Notes: 
 - only test phase?
 '
-
-### without updating --------------------------------------------------------
 
 s3_m1_dat <- list(
   PART = as.factor(s3_choices$part_short) , 
@@ -328,110 +167,147 @@ s3_m1 <- brm(m1_f ,
              file='fits/s3_m1'
 )
 
-summary(s3_m1)
+s3_m1_posts <- make_posts_m1(s3_m1)
 
-s3_m1_posts <-  s3_m1 |>  
-  spread_draws(
-    b_Intercept, b_S, b_Gshort, b_PROB_TTRUE, # main effects
-    `b_Gshort:S` , `b_S:PROB_TTRUE` ,  `b_Gshort:PROB_TTRUE` , # 2-way interaction
-    `b_Gshort:S:PROB_TTRUE`,  # 3-way interaction
-    `sd_PROB__Intercept` , 
-    `sd_PART__Intercept`
-  )  |> 
-  rename(beta_0 = b_Intercept , 
-         beta_1 = b_Gshort ,
-         beta_2 = b_S , 
-         beta_3 = `b_Gshort:S` , 
-         beta_4 = b_PROB_TTRUE , 
-         beta_5 = `b_Gshort:PROB_TTRUE` , 
-         beta_6 = `b_S:PROB_TTRUE` , 
-         beta_7 = `b_Gshort:S:PROB_TTRUE` ,
-         sigma_u = `sd_PROB__Intercept` , 
-         sigma_v = `sd_PART__Intercept`
-  ) |> 
-  mutate(
-    beta_long = beta_2 ,
-    beta_short = beta_2 + beta_3
-  ) |> 
-  select(beta_long, beta_short, beta_0, beta_1, beta_2, beta_3, beta_4, beta_5, beta_6, beta_7, sigma_u:sigma_v)
+## Tables ------------------------------------------------------------------
 
-s3_m1_effects <- summarise_draws(s3_m1_posts, 
-                                 'mean', 
-                                 ~quantile(.x, probs = 0.025),
-                                 ~quantile(.x, probs = 0.975),
-                                 'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
-  rename(Coefficient = variable , 
-         Mean = mean ,
-         Median = median , 
-         SD = sd ,
-         R = rhat ,
-         ESS_bulk = ess_bulk , 
-         ESS_tail = ess_tail)
-
-kable(s3_m1_effects, format = "latex", booktabs = TRUE, digits = 2,
-      caption = "Study 3 Posterior Summaries of the Logistic Regression Model")
+make_custom_m1_TeX_table <- function(m1_posts, lower=0.025, upper=0.975,  digits=3){
+  
+  m1_posts |> 
+    summarise_draws('mean', 
+                    ~quantile(.x, probs = lower) ,
+                    ~quantile(.x, probs = upper) ,
+                    'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
+    mutate(bold = `2.5%` > 0 | `97.5%` < 0 ,
+           mean = ifelse(bold & variable %in%  c("beta_long", "beta_short", "beta_delta") , paste0("\\textbf{", round(mean,digits), "}"), round(mean, digits)) , 
+           `2.5%` = ifelse(bold & variable %in%  c("beta_long", "beta_short", "beta_delta"), paste0("\\textbf{", round(`2.5%`, digits), "}"), round(`2.5%`,digits)) , 
+           `97.5%` = ifelse(bold& variable %in%  c("beta_long", "beta_short", "beta_delta"), paste0("\\textbf{", round(`97.5%`, digits), "}"), round(`97.5%`,digits))) |>
+    select(-bold) |> 
+    rename(Coefficient = variable , 
+           Mean = mean ,
+           Median = median , 
+           SD = sd ,
+           R = rhat ,
+           ESS_bulk = ess_bulk , 
+           ESS_tail = ess_tail)
+  
+}
 
 
-### with updating -----------------------------------------------------------
+m1_addtorow <- list(pos = list(-1, 0, 3, 11,13),
+                    command = c("\\midrule\n", 
+                                "\\midrule\n\\multicolumn{9}{c}{\\textit{Target estimates}}\\\\\n",
+                                "\\midrule\n\\multicolumn{9}{c}{\\textit{Fixed effects}}\\\\\n",
+                                "\\midrule\n\\multicolumn{9}{c}{\\textit{Random effects (Hyperparameters)}}\\\\\n",
+                                "\\midrule"))
 
-s3_m1_dat_up <- Map(c, s2_m1_dat_up, s3_m1_dat)
 
-s3_m1_up <- brm(m1_f , 
-                data=s3_m1_dat_up , 
-                prior = s1_m1_prior ,
-                family = bernoulli(link = "logit") ,
-                iter = 2000 ,
-                warmup = 1000 ,
-                chains = 6  ,
-                cores = 6 ,
-                save_pars = save_pars(all=T) ,
-                file='fits/s3_m1_up'
+m1_coef_names <- c("$\\beta_{\\text{long}}$",
+                   "$\\beta_{\\text{short}}$",
+                   "$\\beta_{\\Delta}$",
+                   "$\\beta_0$",
+                   "$\\beta_1$",
+                   "$\\beta_2$",
+                   "$\\beta_3$",
+                   "$\\beta_4$",
+                   "$\\beta_5$",
+                   "$\\beta_6$",
+                   "$\\beta_7$",
+                   "$\\sigma_u$",
+                   "$\\sigma_v$")
+
+m1_col_names <- c("Coef.", "Mean", "2.5\\%", "97.5\\%",
+                  "Median", "SD", "$\\hat{R}$", 
+                  "$\\text{ESS}_{\\text{bulk}}$", "$\\text{ESS}_{\\text{tail}}$")
+
+### Exp. 1 ------------------------------------------------------------------
+
+s1_m1_effects <- make_custom_m1_TeX_table(s1_m1_posts)
+
+s1_m1_effects$Coefficient <- m1_coef_names
+colnames(s1_m1_effects) <- m1_col_names
+
+s1_m1_tab <- xtable(
+  s1_m1_effects,
+  caption = "Study 1 Posterior Summaries of the Logistic Regression Model",
+  label = "tab:s1_m1",
+  align = "lrrrrrrrrr"
 )
 
-summary(s3_m1_up)
+print(
+  s1_m1_tab,
+  file = "manuscript/tables/s1_m1.tex", 
+  include.rownames = FALSE,
+  booktabs = TRUE,
+  sanitize.text.function = identity,
+  comment = FALSE,
+  add.to.row = m1_addtorow, 
+  caption.placement = "top" , 
+  label = "tab:s1_m1",
+  table.placement = "hp",
+  hline.after = NULL
+)
 
-s3_m1_up_posts <-  s3_m1_up |>  
-  spread_draws(
-    b_Intercept, b_S, b_Gshort, b_PROB_TTRUE, # main effects
-    `b_Gshort:S` , `b_S:PROB_TTRUE` ,  `b_Gshort:PROB_TTRUE` , # 2-way interaction
-    `b_Gshort:S:PROB_TTRUE`,  # 3-way interaction
-    `sd_PROB__Intercept` , 
-    `sd_PART__Intercept`
-  )  |> 
-  rename(beta_0 = b_Intercept , 
-         beta_1 = b_Gshort ,
-         beta_2 = b_S , 
-         beta_3 = `b_Gshort:S` , 
-         beta_4 = b_PROB_TTRUE , 
-         beta_5 = `b_Gshort:PROB_TTRUE` , 
-         beta_6 = `b_S:PROB_TTRUE` , 
-         beta_7 = `b_Gshort:S:PROB_TTRUE` ,
-         sigma_u = `sd_PROB__Intercept` , 
-         sigma_v = `sd_PART__Intercept`
-  ) |> 
-  mutate(
-    beta_long = beta_2 ,
-    beta_short = beta_2 + beta_3
-  ) |> 
-  select(beta_long, beta_short, beta_0, beta_1, beta_2, beta_3, beta_4, beta_5, beta_6, beta_7, sigma_u:sigma_v)
+### Exp. 2 ------------------------------------------------------------------
 
-s3_m1_up_effects <- summarise_draws(s3_m1_up_posts, 
-                                    'mean', 
-                                    ~quantile(.x, probs = 0.025),
-                                    ~quantile(.x, probs = 0.975),
-                                    'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
-  rename(Coefficient = variable , 
-         Mean = mean ,
-         Median = median , 
-         SD = sd ,
-         R = rhat ,
-         ESS_bulk = ess_bulk , 
-         ESS_tail = ess_tail)
+s2_m1_effects <- make_custom_m1_TeX_table(s2_m1_posts)
 
-kable(s3_m1_up_effects, format = "latex", booktabs = TRUE, digits = 2,
-      caption = "Study 3 Posterior Summaries (updated) of the Logistic Regression Model")
 
-## Visualization -----------------------------------------------------------
+s2_m1_effects$Coefficient <- m1_coef_names
+colnames(s2_m1_effects) <- m1_col_names
+
+s2_m1_tab <- xtable(
+  s2_m1_effects,
+  caption = "Study 2 Posterior Summaries of the Logistic Regression Model",
+  label = "tab:s2_m1",
+  align = "lrrrrrrrrr"
+)
+
+print(
+  s2_m1_tab,
+  file = "manuscript/tables/s2_m1.tex", 
+  include.rownames = FALSE,
+  booktabs = TRUE,
+  sanitize.text.function = identity,
+  comment = FALSE,
+  add.to.row = m1_addtorow, 
+  caption.placement = "top" , 
+  label = "tab:s2_m1",
+  table.placement = "hp",
+  hline.after = NULL
+)
+
+
+### Exp. 3 ------------------------------------------------------------------
+
+s3_m1_effects <- make_custom_m1_TeX_table(s3_m1_posts)
+
+
+s3_m1_effects$Coefficient <- m1_coef_names
+colnames(s3_m1_effects) <- m1_col_names
+
+s3_m1_tab <- xtable(
+  s3_m1_effects,
+  caption = "Study 3 Posterior Summaries of the Logistic Regression Model",
+  label = "tab:s3_m1",
+  align = "lrrrrrrrrr"
+)
+
+print(
+  s3_m1_tab,
+  file = "manuscript/tables/s3_m1.tex", 
+  include.rownames = FALSE,
+  booktabs = TRUE,
+  sanitize.text.function = identity,
+  comment = FALSE,
+  add.to.row = m1_addtorow, 
+  caption.placement = "top" , 
+  label = "tab:s3_m1",
+  table.placement = "hp",
+  hline.after = NULL
+)
+
+## Figures -----------------------------------------------------------
 
 s1_m1_preds <- s1_m1_posts |> 
   mutate(alpha_long = beta_0 , 
@@ -487,41 +363,7 @@ s3_m1_preds <- s3_m1_posts |>
   mutate(experiment = as.factor('s3'),
          prior = as.factor('Informative'))
 
-s2_m1_up_preds <- s2_m1_up_posts |> 
-  mutate(alpha_long = beta_0 , 
-         alpha_short = beta_0 + beta_1) |> 
-  select(alpha_long, alpha_short, beta_long, beta_short) |> 
-  pivot_longer(cols = alpha_long:beta_short, names_to = 'param', values_to = 'estimate') |> 
-  separate_wider_delim(param ,delim='_' , names=c('coefficient','goal')) |>
-  group_by(coefficient, goal) |> 
-  mutate(iter = row_number()) |> 
-  pivot_wider(names_from = 'coefficient', values_from = 'estimate') |> 
-  expand_grid(S_tilde=seq(min(s2_m1_dat$S),max(s2_m1_dat$S),.01)) |> 
-  mutate(y_pred = plogis(alpha+beta*S_tilde)) |> 
-  group_by(goal, S_tilde) |> 
-  summarise(m =  mean(y_pred) , 
-            q5 = quantile(y_pred, probs = .05) , 
-            q95 = quantile(y_pred, probs = .95)) |> 
-  mutate(experiment = as.factor('s2'),
-         prior = as.factor('Updated'))
 
-s3_m1_up_preds <- s3_m1_up_posts |> 
-  mutate(alpha_long = beta_0 , 
-         alpha_short = beta_0 + beta_1) |> 
-  select(alpha_long, alpha_short, beta_long, beta_short) |> 
-  pivot_longer(cols = alpha_long:beta_short, names_to = 'param', values_to = 'estimate') |> 
-  separate_wider_delim(param ,delim='_' , names=c('coefficient','goal')) |>
-  group_by(coefficient, goal) |> 
-  mutate(iter = row_number()) |> 
-  pivot_wider(names_from = 'coefficient', values_from = 'estimate') |> 
-  expand_grid(S_tilde=seq(min(s3_m1_dat_up$S),max(s3_m1_dat_up$S),.01)) |> 
-  mutate(y_pred = plogis(alpha+beta*S_tilde)) |> 
-  group_by(goal, S_tilde) |> 
-  summarise(m =  mean(y_pred) , 
-            q5 = quantile(y_pred, probs = .05) , 
-            q95 = quantile(y_pred, probs = .95)) |> 
-  mutate(experiment = as.factor('s3'),
-         prior = as.factor('Updated'))
 
 m1_figure <- bind_rows(s1_m1_preds, s2_m1_preds, s3_m1_preds) |> 
   ggplot(aes(S_tilde,m, color = goal, fill=goal)) + 
@@ -540,105 +382,9 @@ m1_figure <- bind_rows(s1_m1_preds, s2_m1_preds, s3_m1_preds) |>
 m1_figure
 ggsave('manuscript/figures/switch_effects.jpg', plot=m1_figure, units = 'mm', width = 190, height = 190*.4)
 
-set.seed(123)
-n <- 6e3
 
-prior_long_inf <-  rnorm(n, 0, .5)
-prior_short_inf <-  rnorm(n, 0, .5) + prior_long_inf
 
-s1_i_long <- tibble(estimate = c(s1_m1_posts$beta_long, prior_long_inf) ,
-                    goal = 'long' , 
-                    experiment = as.factor('s1') , 
-                    dist = c(rep('post',n), rep('prior',n)) , 
-                    prior = 'informative'
-                    )
-
-s1_i_short <- tibble(estimate = c(s1_m1_posts$beta_short, prior_short_inf) ,
-                    goal = 'short' , 
-                    experiment = as.factor('s1') , 
-                    dist = c(rep('post',n), rep('prior',n)) , 
-                    prior = 'informative'
-                    )
-
-s2_i_long <- tibble(estimate = c(s2_m1_posts$beta_long, prior_long_inf) ,
-                    goal = 'long' , 
-                    experiment = as.factor('s2') , 
-                    dist = c(rep('post',n), rep('prior',n)) , 
-                    prior = 'informative'
-)
-
-s2_i_short <- tibble(estimate = c(s2_m1_posts$beta_short, prior_short_inf) ,
-                     goal = 'short' , 
-                     experiment = as.factor('s2') , 
-                     dist = c(rep('post',n), rep('prior',n)) , 
-                     prior = 'informative'
-)
-
-s3_i_long <- tibble(estimate = c(s3_m1_posts$beta_long, prior_long_inf) ,
-                    goal = 'long' , 
-                    experiment = as.factor('s3') , 
-                    dist = c(rep('post',n), rep('prior',n)) , 
-                    prior = 'informative'
-)
-
-s3_i_short <- tibble(estimate = c(s3_m1_posts$beta_short, prior_short_inf) ,
-                     goal = 'short' , 
-                     experiment = as.factor('s3') , 
-                     dist = c(rep('post',n), rep('prior',n)) , 
-                     prior = 'informative'
-)
-
-s2_u_long <- tibble(estimate = c(s2_m1_up_posts$beta_long, s1_m1_posts$beta_long) ,
-                    goal = 'long' , 
-                    experiment = as.factor('s2') , 
-                    dist = c(rep('post',n), rep('prior',n)) , 
-                    prior = 'updated'
-)
-
-s2_u_short <- tibble(estimate = c(s2_m1_up_posts$beta_short, s1_m1_posts$beta_short) ,
-                     goal = 'short' , 
-                     experiment = as.factor('s2') , 
-                     dist = c(rep('post',n), rep('prior',n)) , 
-                     prior = 'updated'
-)
-
-s3_u_long <- tibble(estimate = c(s3_m1_up_posts$beta_long, s2_m1_posts$beta_long) ,
-                    goal = 'long' , 
-                    experiment = as.factor('s3') , 
-                    dist = c(rep('post',n), rep('prior',n)) , 
-                    prior = 'updated'
-)
-
-s3_u_short <- tibble(estimate = c(s3_m1_up_posts$beta_short, s2_m1_posts$beta_short) ,
-                     goal = 'short' , 
-                     experiment = as.factor('s3') , 
-                     dist = c(rep('post',n), rep('prior',n)) , 
-                     prior = 'updated'
-)
-
-m1_target_posts <- bind_rows(s1_i_long, s1_i_short , 
-                             s2_i_long, s2_i_short ,
-                             s3_i_long, s3_i_short 
-                             #s2_u_long, s2_u_short ,
-                             #s3_u_long, s3_u_short
-                             )
-
-m1_figure_posts <- m1_target_posts |> ggplot(aes(x=estimate, colour = goal, linetype = factor(dist, levels = c('post', 'prior')))) +
-  facet_wrap(~factor(experiment, levels = c('s1', 's2', 's3'), labels=c('Exp. 1', 'Exp. 2', 'Exp. 3')), scales='free', drop=T, nrow=1) +
-  geom_density(linewidth=1) + 
-  labs(x = expression(beta) , 
-       y = 'Density' , 
-       colour='Goal' , 
-       linetype='Distribution') +
-  theme_bw() + 
-  scale_x_continuous(limits=c(-1,1)) +
-  scale_color_scico_d(palette='managua', begin=.1, end=.9) +
-  scale_fill_scico_d(palette='managua', begin=.1, end=.9)
-m1_figure_posts
-
-ggsave('manuscript/figures/switch_effects_posts.jpg', plot=m1_figure_posts, units = 'mm', width = 190, height = 190*.4)
-
-# Switch behavior (BEOI) -----------------------------------------------------
+# M2: Switch behavior (BEOI) -----------------------------------------------------
 'Notes: 
 - 
 '
@@ -1249,6 +995,74 @@ m4_figure <- p +
 
 m4_figure
 ggsave('manuscript/figures/switch_rate_change.jpg', plot=m4_figure, units = 'mm', width = 140, height = 140*.60)
+
+
+
+
+
+# method and materials -----------------------------------------------------------------
+
+## participants ------------------------------------------------------------
+
+participants <- choices |> 
+  distinct(study, part_short, .keep_all = T) |> 
+  select(study:training)
+
+participants |> 
+  group_by(study) |> 
+  summarise(n = n(), 
+            age.mean = mean(age, na.rm=TRUE) ,
+            age.sd = sd(age, na.rm=TRUE) ,
+            age.lower = range(age, na.rm=TRUE)[1] , 
+            age.upper = range(age, na.rm=TRUE)[2] , 
+            women = sum(gender=='w', na.rm = T) , 
+            men = sum(gender=='m', na.rm=T) , 
+            enby = sum(gender=='enby', na.rm=T) , 
+            na = sum(is.na(gender))
+  )
+
+## problems ----------------------------------------------------------------
+
+# get outcome range
+problems |> 
+  pivot_longer(cols = o1_p1:o2_3 , 
+               values_to = 'value',
+               names_to = 'feature') |> 
+  separate_wider_delim(
+    feature, delim = '_' ,
+    names = c('option', 'feature')
+  ) |> 
+  mutate(number = str_extract(feature, '\\d'), 
+         feature = if_else(str_detect(feature, 'p'),'probability', 'outcome')) |> 
+  pivot_wider(names_from = feature, values_from = value) |> 
+  filter(study=='s1', probability!=0) |> 
+  summarise(min_out = min(outcome),
+            max_out = max(outcome),
+  )
+
+
+## misc --------------------------------------------------------------------
+
+n_choices <- choices |> filter(study=='s1') |> nrow() # 7320
+n_samples <- sampling |> filter(study=='s1') |> nrow() # 163573
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
