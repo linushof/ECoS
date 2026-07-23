@@ -5,7 +5,7 @@
 pacman::p_load(tidyverse,
                brms, posterior, tidybayes, # Bayes
                scico, patchwork, # plotting
-               knitr # tables
+               knitr, kableExtra # tables
                )
 
 
@@ -86,15 +86,12 @@ make_posts_m1 <- function(m1_fit){
 ## Exp. 1 -----------------------------------------------------------------
 
 # data
-s1_m1_dat <- list(
-  PART = as.factor(s1_choices$part_short) , 
-  PROB = as.factor(s1_choices$problem) , 
-  PROB_T = s1_choices$problem_type , 
-  G = as.factor(s1_choices$goal) ,
-  S = as.double(scale(s1_choices$switch_rate)) , 
-  C = s1_choices$correct_ground
-)
-
+s1_m1_dat <- list(PART = as.factor(s1_choices$part_short) , 
+                  PROB = as.factor(s1_choices$problem) , 
+                  PROB_T = s1_choices$problem_type , 
+                  G = as.factor(s1_choices$goal) ,
+                  S = as.double(scale(s1_choices$switch_rate)) , 
+                  C = s1_choices$correct_ground)
 
 s1_m1 <- brm(m1_f , 
              data=s1_m1_dat , 
@@ -105,23 +102,19 @@ s1_m1 <- brm(m1_f ,
              chains = 6  ,
              cores = 6 ,
              save_pars = save_pars(all=T) ,
-             file='fits/s1_m1'
-             )
-
+             file='fits/s1_m1')
 s1_m1_posts <- make_posts_m1(s1_m1)
 
 
 
 ## Exp. 2 -----------------------------------------------------------------
 
-s2_m1_dat <- list(
-  PART = as.factor(s2_choices$part_short) , 
-  PROB = as.factor(s2_choices$problem) , 
-  PROB_T = s2_choices$problem_type , 
-  G = as.factor(s2_choices$goal) ,
-  S = as.double(scale(s2_choices$switch_rate)) , 
-  C = s2_choices$correct_ground
-)
+s2_m1_dat <- list(PART = as.factor(s2_choices$part_short) , 
+                  PROB = as.factor(s2_choices$problem) , 
+                  PROB_T = s2_choices$problem_type , 
+                  G = as.factor(s2_choices$goal) ,
+                  S = as.double(scale(s2_choices$switch_rate)) , 
+                  C = s2_choices$correct_ground)
 
 s2_m1 <- brm(m1_f ,
              data=s2_m1_dat ,
@@ -132,10 +125,7 @@ s2_m1 <- brm(m1_f ,
              chains = 6  ,
              cores = 6 ,
              save_pars = save_pars(all=T) ,
-             file='fits/s2_m1'
-)
-
-
+             file='fits/s2_m1')
 s2_m1_posts <- make_posts_m1(s2_m1)
 
 
@@ -146,14 +136,12 @@ s2_m1_posts <- make_posts_m1(s2_m1)
 - only test phase?
 '
 
-s3_m1_dat <- list(
-  PART = as.factor(s3_choices$part_short) , 
-  PROB = as.factor(s3_choices$problem) , 
-  PROB_T = s3_choices$problem_type , 
-  G = as.factor(s3_choices$goal) ,
-  S = as.double(scale(s3_choices$switch_rate)) , 
-  C = s3_choices$correct_ground
-)
+s3_m1_dat <- list(PART = as.factor(s3_choices$part_short) , 
+                  PROB = as.factor(s3_choices$problem) , 
+                  PROB_T = s3_choices$problem_type , 
+                  G = as.factor(s3_choices$goal) ,
+                  S = as.double(scale(s3_choices$switch_rate)) , 
+                  C = s3_choices$correct_ground)
 
 s3_m1 <- brm(m1_f ,
              data=s3_m1_dat ,
@@ -164,9 +152,7 @@ s3_m1 <- brm(m1_f ,
              chains = 6  ,
              cores = 6 ,
              save_pars = save_pars(all=T) ,
-             file='fits/s3_m1'
-)
-
+             file='fits/s3_m1')
 s3_m1_posts <- make_posts_m1(s3_m1)
 
 ## Tables ------------------------------------------------------------------
@@ -194,12 +180,20 @@ make_custom_m1_TeX_table <- function(m1_posts, lower=0.025, upper=0.975,  digits
 }
 
 
-m1_addtorow <- list(pos = list(-1, 0, 3, 11,13),
+m1_addtorow <- list(pos = list(-1, 0, 3, 11,13,13),
                     command = c("\\midrule\n", 
                                 "\\midrule\n\\multicolumn{9}{c}{\\textit{Target estimates}}\\\\\n",
                                 "\\midrule\n\\multicolumn{9}{c}{\\textit{Fixed effects}}\\\\\n",
                                 "\\midrule\n\\multicolumn{9}{c}{\\textit{Random effects (Hyperparameters)}}\\\\\n",
-                                "\\midrule"))
+                                "\\midrule\n", 
+                                paste0(
+                                  "\\addlinespace\n",
+                                  "\\multicolumn{9}{p{\\linewidth}}{\\footnotesize ",
+                                  "\\textit{Note.} Bold estimates have 95\\% credible intervals that exclude zero.",
+                                  "}\\\\\n"
+                                )
+                                )
+                    )
 
 
 m1_coef_names <- c("$\\beta_{\\text{long}}$",
@@ -216,96 +210,44 @@ m1_coef_names <- c("$\\beta_{\\text{long}}$",
                    "$\\sigma_u$",
                    "$\\sigma_v$")
 
-m1_col_names <- c("Coef.", "Mean", "2.5\\%", "97.5\\%",
-                  "Median", "SD", "$\\hat{R}$", 
-                  "$\\text{ESS}_{\\text{bulk}}$", "$\\text{ESS}_{\\text{tail}}$")
+m1_col_names <- c("Coef.", 
+                  paste0("Mean", footnote_marker_symbol(1, format = "latex")), 
+                  paste0("2.5\\%", footnote_marker_symbol(1, format = "latex")), 
+                  paste0("97.5\\%", footnote_marker_symbol(1, format = "latex")), 
+                  "Median", "SD", 
+                  paste0("$\\hat{R}$", footnote_marker_symbol(2, format = "latex")) , 
+                  paste0("$\\text{ESS}_{\\text{bulk}}$", footnote_marker_symbol(3, format = "latex")) , 
+                  "$\\text{ESS}_{\\text{tail}}$")
 
-### Exp. 1 ------------------------------------------------------------------
-
-s1_m1_effects <- make_custom_m1_TeX_table(s1_m1_posts)
-
-s1_m1_effects$Coefficient <- m1_coef_names
-colnames(s1_m1_effects) <- m1_col_names
-
-s1_m1_tab <- xtable(
-  s1_m1_effects,
-  caption = "Study 1 Posterior Summaries of the Logistic Regression Model",
-  label = "tab:s1_m1",
-  align = "lrrrrrrrrr"
-)
-
-print(
-  s1_m1_tab,
-  file = "manuscript/tables/s1_m1.tex", 
-  include.rownames = FALSE,
-  booktabs = TRUE,
-  sanitize.text.function = identity,
-  comment = FALSE,
-  add.to.row = m1_addtorow, 
-  caption.placement = "top" , 
-  label = "tab:s1_m1",
-  table.placement = "hp",
-  hline.after = NULL
-)
-
-### Exp. 2 ------------------------------------------------------------------
-
-s2_m1_effects <- make_custom_m1_TeX_table(s2_m1_posts)
-
-
-s2_m1_effects$Coefficient <- m1_coef_names
-colnames(s2_m1_effects) <- m1_col_names
-
-s2_m1_tab <- xtable(
-  s2_m1_effects,
-  caption = "Study 2 Posterior Summaries of the Logistic Regression Model",
-  label = "tab:s2_m1",
-  align = "lrrrrrrrrr"
-)
-
-print(
-  s2_m1_tab,
-  file = "manuscript/tables/s2_m1.tex", 
-  include.rownames = FALSE,
-  booktabs = TRUE,
-  sanitize.text.function = identity,
-  comment = FALSE,
-  add.to.row = m1_addtorow, 
-  caption.placement = "top" , 
-  label = "tab:s2_m1",
-  table.placement = "hp",
-  hline.after = NULL
-)
-
-
-### Exp. 3 ------------------------------------------------------------------
-
-s3_m1_effects <- make_custom_m1_TeX_table(s3_m1_posts)
-
-
-s3_m1_effects$Coefficient <- m1_coef_names
-colnames(s3_m1_effects) <- m1_col_names
-
-s3_m1_tab <- xtable(
-  s3_m1_effects,
-  caption = "Study 3 Posterior Summaries of the Logistic Regression Model",
-  label = "tab:s3_m1",
-  align = "lrrrrrrrrr"
-)
-
-print(
-  s3_m1_tab,
-  file = "manuscript/tables/s3_m1.tex", 
-  include.rownames = FALSE,
-  booktabs = TRUE,
-  sanitize.text.function = identity,
-  comment = FALSE,
-  add.to.row = m1_addtorow, 
-  caption.placement = "top" , 
-  label = "tab:s3_m1",
-  table.placement = "hp",
-  hline.after = NULL
-)
+posteriors <- list(s1_m1_posts, s2_m1_posts, s3_m1_posts)
+for(i in seq_along(1:length(posteriors))){
+  
+  effects <- make_custom_m1_TeX_table(posteriors[[i]])
+  effects$Coefficient <- m1_coef_names
+  colnames(effects) <- m1_col_names
+  
+  effects |>
+    kbl(format = "latex",
+        booktabs = TRUE,
+        caption = paste0("Study ", i, " Posterior Summaries of the Logistic Regression Model"),
+        label = paste0("s",i,"_m1"),
+        align = c("l", rep("r", 8)),
+        escape = FALSE, 
+        digits=3) |>
+    pack_rows("Target estimates", 1, 3, bold=F, italic=T) |>
+    pack_rows("Fixed effects", 4, 11, bold=F, italic=T) |>
+    pack_rows("Random effects (Hyperparameters)", 12, 13, bold=F, italic=T) |>
+    footnote(general = "",
+             general_title = "Note. ",
+             escape = FALSE,
+             threeparttable = TRUE,
+             symbol = c(
+               "Only \\\\textit{target estimates} with 95\\\\% credible interval excluding zero are bold.", 
+               "Scale reduction factor", 
+               "Effective sample size")) |>  
+    save_kable(paste0("manuscript/tables/", paste0("s",i,"_m1"),".tex"))
+  
+} 
 
 ## Figures -----------------------------------------------------------
 
@@ -380,7 +322,9 @@ m1_figure <- bind_rows(s1_m1_preds, s2_m1_preds, s3_m1_preds) |>
   scale_fill_scico_d(palette='managua', begin=.1, end=.9)
 
 m1_figure
+
 ggsave('manuscript/figures/switch_effects.jpg', plot=m1_figure, units = 'mm', width = 190, height = 190*.4)
+ggsave('manuscript/figures/switch_effects.eps', plot=m1_figure, units = 'mm', width = 190, height = 190*.4)
 
 
 
@@ -388,32 +332,51 @@ ggsave('manuscript/figures/switch_effects.jpg', plot=m1_figure, units = 'mm', wi
 'Notes: 
 - 
 '
+
+s1_m2_dat <- list(PART = as.factor(s1_choices$part_short) , 
+                  PROB = as.factor(s1_choices$problem) ,
+                  G = as.factor(s1_choices$goal) ,
+                  S = as.double(s1_choices$switch_rate))
+
+
+m2_prior <- 
+  # fixed effects
+  ## intercepts (distribution of long-term group)
+  prior(student_t(3, -.75,.5), class = 'Intercept') + # mu: mean over (0,1)
+  prior(normal(1,.5), class = 'Intercept', dpar= 'phi') + # phi: precision over (0,1) 
+  prior(logistic(0,1), class = 'Intercept', dpar='zoi') + # pi: probability of 1
+  # ## slopes (group differences: divergence of short-term from long-term)
+  prior(normal(0,.5), class = 'b', coef = 'Gshort') + # mu: mean over (0,1)
+  prior(normal(0,.25), class = 'b', coef = 'Gshort', dpar= 'phi') + # phi: precision over (0,1) 
+  prior(normal(0,.5), class = 'b', coef = 'Gshort', dpar='zoi') # pi: probability of 1
+
+
+# (base) model
+m2_f_b <- bf(S ~ 1 + G , # mean over (0,1) 
+             phi ~ 1 + G , # precision/variance over (0-1) 
+             zoi ~ 1 + G , # probability of 0 or 1
+             coi ~ 0 + offset(1e2) # (conditional) probability of 1 given 0 or 1
+             )
+
+
 ## Exp. 1 ------------------------------------------------------------
 
-s1_m2_dat <- list(
-  PART = as.factor(s1_choices$part_short) , 
-  PROB = as.factor(s1_choices$problem) ,
-  G = as.factor(s1_choices$goal) ,
-  S = as.double(s1_choices$switch_rate)
-)
-
-### base model --------------------------------------------------------------
-
-m2_f_b <- bf(S ~ 1 + G , 
-                phi ~ 1 + G ,  # The precision of the 0-1 values, or phi
-                zoi ~ 1 + G , 
-                coi ~ 0 + offset(1e2)
-)
 
 s1_m2_b <- brm(m2_f_b , 
                data=s1_m2_dat , 
+               prior = m2_prior ,
                family = zero_one_inflated_beta() ,
-               chains = 4  ,
-               cores = 4, 
+               iter = 2000 ,
+               warmup = 1000 ,
+               chains = 6  ,
+               cores = 6 , 
                file = 'fits/s1_m2_base')
 summary(s1_m2_b)
 pp_check(s1_m2_b)
 mcmc_plot(s1_m2_b, type='trace', variable = "^b_", regex = TRUE)
+s1_m2_b$prior
+
+
 
 variables(s1_m2_b)
 s1_m2_posts <-  s1_m2_b |>  
@@ -453,25 +416,57 @@ kable(s1_m2_effects, format = "latex", booktabs = TRUE, digits = 2,
 
 ### minimal extensions ------------------------------------------------------
 
-s1_m2_f_e <- bf(S ~ 1 + G , 
+
+#### subject-specific on (0,1) mean ------------------------------------------------------------
+
+m2_prior_e1 <- 
+  # fixed effects
+  ## intercepts (distribution of long-term group)
+  prior(student_t(3, -.75,.5), class = 'Intercept') + # mu: mean over (0,1)
+  prior(normal(1,.5), class = 'Intercept', dpar= 'phi') + # phi: precision over (0,1) 
+  prior(logistic(0,1), class = 'Intercept', dpar='zoi') + # pi: probability of 1
+  
+  # ## slopes (group differences: divergence of short-term from long-term)
+  prior(normal(0,.5), class = 'b', coef = 'Gshort') + # mu: mean over (0,1)
+  prior(normal(0,.25), class = 'b', coef = 'Gshort', dpar= 'phi') + # phi: precision over (0,1) 
+  prior(normal(0,.5), class = 'b', coef = 'Gshort', dpar='zoi') + # pi: probability of 1
+  
+  prior(student_t(3, 0, .5), class = 'sd', coef='Intercept', group='PROB') 
+  
+
+
+
+s1_m2_f_e1 <- bf(S ~ 1 + G + (1 | PROB)  , 
+                 phi ~ 1 + G, 
+                 zoi ~ 1 + G , 
+                 coi ~ 0 + offset(1e2)
+                 )
+# causes problems in mean part
+
+s1_m2_e1 <- brm(s1_m2_f_e1 , 
+               data=s1_m2_dat , 
+               prior = m2_prior_e1 ,
+               family = zero_one_inflated_beta() ,
+               iter = 2000 ,
+               warmup = 1000 ,
+               chains = 6  ,
+               cores = 6,
+               file = 'fits/s1_m2_extension_1')
+
+summary(s1_m2_e1)
+pp_check(s1_m2_e1)
+mcmc_plot(s1_m2_e1, type='trace', variable = "^b_", regex = TRUE)
+s1_m2_e1$prior
+
+summary(s1_m2_e1)
+pp_check(s1_m2_e1)
+
+
+#### subject-specific on 1 probability  ------------------------------------------------------------
+
+s1_m2_f_e2 <- bf(S ~ 1 + G +  , 
                 phi ~ 1 + G  ,
                 zoi ~ 1 + G + (1 | PART) , 
-                coi ~ 0 + offset(1e2)
-)
-
-s1_m2_e <- brm(s1_m2_f_e , 
-               data=s1_m2_dat , 
-               family = zero_one_inflated_beta() ,
-               chains = 4  ,
-               cores = 4)
-summary(s1_m2_e)
-pp_check(s1_m2_e)
-# convergence statistics good
-
-
-s1_m2_f_e2 <- bf(S ~ 1 + G + (1 | PART) , 
-                phi ~ 1 + G  ,
-                zoi ~ 1 + G  , 
                 coi ~ 0 + offset(1e2)
 )
 
