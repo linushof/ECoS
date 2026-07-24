@@ -4,7 +4,7 @@
 
 pacman::p_load(tidyverse,
                brms, posterior, tidybayes, # Bayes
-               scico, patchwork, # plotting
+               scico, patchwork, ggbeeswarm, # plotting
                knitr, kableExtra # tables
                )
 
@@ -1040,6 +1040,128 @@ problems |>
 
 n_choices <- choices |> filter(study=='s1') |> nrow() # 7320
 n_samples <- sampling |> filter(study=='s1') |> nrow() # 163573
+
+
+
+
+# Appendix ----------------------------------------------------------------
+
+
+## mean switch rates -------------------------------------------------------
+
+plot_ind_switch_mean <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
+  filter(phase=='test') |> 
+  group_by(study, goal, participant) |>
+  summarise(switchM = mean(switch_rate)) |> 
+  ungroup() |> 
+  arrange(switchM) |> 
+  mutate(participant=factor(participant,participant)) |> 
+  ggplot(aes(x=participant, y=switchM, color=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')))) +
+  facet_wrap(~factor(study, levels=c('s1', 's2', 's3'), labels = c('Exp. 1',  'Exp. 2', 'Exp. 3')), nrow=1, scales = 'free') + 
+  geom_segment(aes(x=participant, xend=participant, y=0, yend=switchM), size=0.5) +
+  geom_point(size= 1) +
+  coord_flip() +
+  scale_color_manual(values=two_cols) +
+  theme_bw() + 
+  theme(axis.text.y = element_blank(), 
+        axis.ticks.y = element_blank() , 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(x="Participant", 
+       y="Mean Switch Rate",
+       color="Goal")
+
+plot_ind_switch_mean_box <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
+  filter(phase=='test') |> 
+  group_by(study, goal, participant) |>
+  summarise(switchM = mean(switch_rate)) |> 
+  ggplot(aes(x=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')), 
+             y=switchM, 
+             fill=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')))) +
+  facet_wrap(~factor(study, levels=c('s1', 's2', 's3'), labels = c('Exp. 1',  'Exp. 2', 'Exp. 3')), nrow=1, scales = 'free') + 
+  geom_boxplot() +
+  #geom_beeswarm(shape=1) +
+  scale_fill_manual(values=two_cols) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  labs(x="Goal", 
+       y="Mean Switch Rate",
+       fill="Goal")
+
+
+figure_ind_switch_mean <- plot_ind_switch_mean / plot_ind_switch_mean_box + 
+  plot_layout(guides = 'collect') + 
+  plot_annotation(tag_levels = 'A')
+figure_ind_switch_mean
+
+
+ggsave('manuscript/figures/switch_rates_ind_mean.jpg', plot=figure_ind_switch_mean, units = 'mm', width = 190, height = 190)
+ggsave('manuscript/figures/switch_rates_ind_mean.eps', plot=figure_ind_switch_mean, units = 'mm', width = 190, height = 190)
+
+
+
+## switch rates = 1 ---------------------------------------------------------
+
+
+plot_ind_switch_ones <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
+  filter(phase=='test') |> 
+  mutate(switch1 = switch_rate==1) |> 
+  group_by(study, goal, participant) |> 
+  summarise(trials = sum(switch1)) |> 
+  ungroup() |> 
+  arrange(trials) |> 
+  mutate(participant=factor(participant,participant)) |> 
+  ggplot(aes(x=participant, y=trials, color=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')))) +
+  facet_wrap(~factor(study, levels=c('s1', 's2', 's3'), labels = c('Exp. 1',  'Exp. 2', 'Exp. 3')), nrow=1, scales = 'free') + 
+  geom_segment(aes(x=participant, xend=participant, y=0, yend=trials), size=0.5) +
+  geom_point(size= 1) +
+  coord_flip() +
+  scale_color_manual(values=two_cols) +
+  theme_bw() + 
+  theme(axis.text.y = element_blank(), 
+        axis.ticks.y = element_blank() , 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(x="Participant", 
+       y="Trials with Switch Rate = 1",
+       color="Goal")
+
+
+
+plot_ind_switch_ones_box <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
+  filter(phase=='test') |> 
+  mutate(switch1 = switch_rate==1) |> 
+  group_by(study, goal, participant) |> 
+  summarise(trials = sum(switch1)) |> 
+  ggplot(aes(x=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')), 
+             y=trials, 
+             fill=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')))) +
+  facet_wrap(~factor(study, levels=c('s1', 's2', 's3'), labels = c('Exp. 1',  'Exp. 2', 'Exp. 3')), nrow=1, scales = 'free') + 
+  geom_boxplot() +
+  #geom_beeswarm(shape=1) +
+  scale_fill_manual(values=two_cols) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  labs(x="Goal", 
+       y="Trials with Switch Rate = 1",
+       fill="Goal")
+
+
+figure_ind_switch_ones <- plot_ind_switch_ones / plot_ind_switch_ones_box + 
+  plot_layout(guides = 'collect') + 
+  plot_annotation(tag_levels = 'A')
+figure_ind_switch_ones
+
+
+ggsave('manuscript/figures/switch_rates_ind_ones.jpg', plot=figure_ind_switch_ones, units = 'mm', width = 190, height = 190)
+ggsave('manuscript/figures/switch_rates_ind_ones.eps', plot=figure_ind_switch_ones, units = 'mm', width = 190, height = 190)
+
+
+
+
+
+
+
 
 
 
