@@ -329,95 +329,6 @@ ggsave('manuscript/figures/switch_effects.eps', plot=m1_figure, units = 'mm', wi
 
 
 # M2: Switch behavior (BEOI) -----------------------------------------------------
-'Notes: 
-- 
-'
-
-s1_m2_dat <- list(PART = as.factor(s1_choices$part_short) , 
-                  PROB = as.factor(s1_choices$problem) ,
-                  G = as.factor(s1_choices$goal) ,
-                  S = as.double(s1_choices$switch_rate))
-
-
-m2_prior <- 
-  # fixed effects
-  ## intercepts (distribution of long-term group)
-  prior(student_t(3, -.75,.5), class = 'Intercept') + # mu: mean over (0,1)
-  prior(normal(1,.5), class = 'Intercept', dpar= 'phi') + # phi: precision over (0,1) 
-  prior(logistic(0,1), class = 'Intercept', dpar='zoi') + # pi: probability of 1
-  # ## slopes (group differences: divergence of short-term from long-term)
-  prior(normal(0,.5), class = 'b', coef = 'Gshort') + # mu: mean over (0,1)
-  prior(normal(0,.25), class = 'b', coef = 'Gshort', dpar= 'phi') + # phi: precision over (0,1) 
-  prior(normal(0,.5), class = 'b', coef = 'Gshort', dpar='zoi') # pi: probability of 1
-
-
-# (base) model
-m2_f_b <- bf(S ~ 1 + G , # mean over (0,1) 
-             phi ~ 1 + G , # precision/variance over (0-1) 
-             zoi ~ 1 + G , # probability of 0 or 1
-             coi ~ 0 + offset(1e2) # (conditional) probability of 1 given 0 or 1
-             )
-
-
-## Exp. 1 ------------------------------------------------------------
-
-
-s1_m2_b <- brm(m2_f_b , 
-               data=s1_m2_dat , 
-               prior = m2_prior ,
-               family = zero_one_inflated_beta() ,
-               iter = 2000 ,
-               warmup = 1000 ,
-               chains = 6  ,
-               cores = 6 , 
-               file = 'fits/s1_m2_base')
-summary(s1_m2_b)
-pp_check(s1_m2_b)
-mcmc_plot(s1_m2_b, type='trace', variable = "^b_", regex = TRUE)
-s1_m2_b$prior
-
-
-
-variables(s1_m2_b)
-s1_m2_posts <-  s1_m2_b |>  
-  spread_draws(
-    b_Intercept, b_phi_Intercept, b_zoi_Intercept, # intercepts (long-term effect)
-    b_Gshort , b_phi_Gshort, b_zoi_Gshort # group differences (deviation short- from long-term)
-    )  |>
-  rename(gamma_0_mu = b_Intercept ,
-         gamma_0_phi = b_phi_Intercept ,
-         gamma_0_pi = b_zoi_Intercept ,
-         gamma_1_mu = b_Gshort ,
-         gamma_1_phi = b_phi_Gshort ,
-         gamma_1_pi = b_zoi_Gshort
-         ) |> 
-  mutate(m_long = plogis(gamma_0_pi)+ (1-plogis(gamma_0_pi)) * plogis(gamma_0_mu) , 
-         m_short = plogis(gamma_0_pi+gamma_1_pi)+ (1-plogis(gamma_0_pi+gamma_1_pi)) * plogis(gamma_0_mu+gamma_1_mu) ,
-         m_diff = m_long-m_short
-         ) |> 
-  select(m_long, m_short, m_diff, gamma_0_mu, gamma_0_phi, gamma_0_pi, gamma_1_mu, gamma_1_phi, gamma_1_pi)
-
-s1_m2_effects <- summarise_draws(s1_m2_posts, 
-                                 'mean', 
-                                 ~quantile(.x, probs = 0.025),
-                                 ~quantile(.x, probs = 0.975),
-                                 'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
-  rename(Coefficient = variable , 
-         Mean = mean ,
-         Median = median , 
-         SD = sd ,
-         R = rhat ,
-         ESS_bulk = ess_bulk , 
-         ESS_tail = ess_tail)
-
-kable(s1_m2_effects, format = "latex", booktabs = TRUE, digits = 2,
-      caption = "Study 1 Posterior Summaries of the BEOI Model")
-
-
-### minimal extensions ------------------------------------------------------
-
-
-#### subject-specific on (0,1) mean ------------------------------------------------------------
 
 m2_prior_e1 <- 
   # fixed effects
@@ -432,8 +343,6 @@ m2_prior_e1 <-
   prior(normal(0,.5), class = 'b', coef = 'Gshort', dpar='zoi') + # pi: probability of 1
   
   prior(student_t(3, 0, .5), class = 'sd', coef='Intercept', group='PROB') 
-  
-
 
 
 s1_m2_f_e1 <- bf(S ~ 1 + G + (1 | PROB)  , 
@@ -441,60 +350,13 @@ s1_m2_f_e1 <- bf(S ~ 1 + G + (1 | PROB)  ,
                  zoi ~ 1 + G , 
                  coi ~ 0 + offset(1e2)
                  )
-# causes problems in mean part
-
-s1_m2_e1 <- brm(s1_m2_f_e1 , 
-               data=s1_m2_dat , 
-               prior = m2_prior_e1 ,
-               family = zero_one_inflated_beta() ,
-               iter = 2000 ,
-               warmup = 1000 ,
-               chains = 6  ,
-               cores = 6,
-               file = 'fits/s1_m2_extension_1')
-
-summary(s1_m2_e1)
-pp_check(s1_m2_e1)
-mcmc_plot(s1_m2_e1, type='trace', variable = "^b_", regex = TRUE)
-s1_m2_e1$prior
-
-summary(s1_m2_e1)
-pp_check(s1_m2_e1)
 
 
-#### subject-specific on 1 probability  ------------------------------------------------------------
-
-s1_m2_f_e2 <- bf(S ~ 1 + G +  , 
-                phi ~ 1 + G  ,
-                zoi ~ 1 + G + (1 | PART) , 
-                coi ~ 0 + offset(1e2)
-)
+## Exp. 1 ------------------------------------------------------------
 
 
-s1_m2_e2 <- brm(s1_m2_f_e2 , 
-               data=s1_m2_dat , 
-               family = zero_one_inflated_beta() ,
-               chains = 4  ,
-               cores = 4)
-summary(s1_m2_e2)
-pp_check(s1_m2_e2)
-# convergence statistics ok (small problems)
-
-s1_m2_f_e3 <- bf(S ~ 1 + G  , 
-                 phi ~ 1 + G + (1 | PART),
-                 zoi ~ 1 + G  , 
-                 coi ~ 0 + offset(1e2)
-)
 
 
-s1_m2_e3 <- brm(s1_m2_f_e3 , 
-                data=s1_m2_dat , 
-                family = zero_one_inflated_beta() ,
-                chains = 4  ,
-                cores = 4)
-summary(s1_m2_e3)
-pp_check(s1_m2_e3)
-# convergence statistics good, best posterior dist.
 
 
 
@@ -509,51 +371,6 @@ s2_m2_dat <- list(
   S = as.double(s2_choices$switch_rate)
 )
 
-### base model --------------------------------------------------------------
-
-s2_m2_b <- brm(m2_f_b , 
-               data=s2_m2_dat , 
-               family = zero_one_inflated_beta() ,
-               chains = 4  ,
-               cores = 4, 
-               file = 'fits/s2_m2_base')
-
-summary(s2_m2_b)
-pp_check(s2_m2_b)
-
-s2_m2_posts <-  s2_m2_b |>  
-  spread_draws(
-    b_Intercept, b_phi_Intercept, b_zoi_Intercept, # intercepts (long-term effect)
-    b_Gshort , b_phi_Gshort, b_zoi_Gshort # group differences (deviation short- from long-term)
-  )  |>
-  rename(gamma_0_mu = b_Intercept ,
-         gamma_0_phi = b_phi_Intercept ,
-         gamma_0_pi = b_zoi_Intercept ,
-         gamma_1_mu = b_Gshort ,
-         gamma_1_phi = b_phi_Gshort ,
-         gamma_1_pi = b_zoi_Gshort
-  ) |> 
-  mutate(m_long = plogis(gamma_0_pi)+ (1-plogis(gamma_0_pi)) * plogis(gamma_0_mu) , 
-         m_short = plogis(gamma_0_pi+gamma_1_pi)+ (1-plogis(gamma_0_pi+gamma_1_pi)) * plogis(gamma_0_mu+gamma_1_mu) ,
-         m_diff = m_long-m_short
-  ) |> 
-  select(m_long, m_short, m_diff, gamma_0_mu, gamma_0_phi, gamma_0_pi, gamma_1_mu, gamma_1_phi, gamma_1_pi) 
-
-s2_m2_effects <- summarise_draws(s2_m2_posts, 
-                                 'mean', 
-                                 ~quantile(.x, probs = 0.025),
-                                 ~quantile(.x, probs = 0.975),
-                                 'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
-  rename(Coefficient = variable , 
-         Mean = mean ,
-         Median = median , 
-         SD = sd ,
-         R = rhat ,
-         ESS_bulk = ess_bulk , 
-         ESS_tail = ess_tail)
-
-kable(s2_m2_effects, format = "latex", booktabs = TRUE, digits = 2,
-      caption = "Study 2 Posterior Summaries of the BEOI Model")
 
 ## Exp. 3 ------------------------------------------------------------------
 
@@ -566,51 +383,6 @@ s3_m2_dat <- list(
   S = as.double(s3_choices_t$switch_rate)
 )
 
-### base model --------------------------------------------------------------
-
-s3_m2_b <- brm(m2_f_b , 
-               data=s3_m2_dat , 
-               family = zero_one_inflated_beta() ,
-               chains = 4  ,
-               cores = 4, 
-               file = 'fits/s3_m2_base')
-
-summary(s3_m2_b)
-pp_check(s3_m2_b)
-
-s3_m2_posts <-  s3_m2_b |>  
-  spread_draws(
-    b_Intercept, b_phi_Intercept, b_zoi_Intercept, # intercepts (long-term effect)
-    b_Gshort , b_phi_Gshort, b_zoi_Gshort # group differences (deviation short- from long-term)
-  )  |>
-  rename(gamma_0_mu = b_Intercept ,
-         gamma_0_phi = b_phi_Intercept ,
-         gamma_0_pi = b_zoi_Intercept ,
-         gamma_1_mu = b_Gshort ,
-         gamma_1_phi = b_phi_Gshort ,
-         gamma_1_pi = b_zoi_Gshort
-  ) |> 
-  mutate(m_long = plogis(gamma_0_pi)+ (1-plogis(gamma_0_pi)) * plogis(gamma_0_mu) , 
-         m_short = plogis(gamma_0_pi+gamma_1_pi)+ (1-plogis(gamma_0_pi+gamma_1_pi)) * plogis(gamma_0_mu+gamma_1_mu) ,
-         m_diff = m_long-m_short
-  ) |> 
-  select(m_long, m_short, m_diff, gamma_0_mu, gamma_0_phi, gamma_0_pi, gamma_1_mu, gamma_1_phi, gamma_1_pi) 
-
-s3_m2_effects <- summarise_draws(s3_m2_posts, 
-                                 'mean', 
-                                 ~quantile(.x, probs = 0.025),
-                                 ~quantile(.x, probs = 0.975),
-                                 'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
-  rename(Coefficient = variable , 
-         Mean = mean ,
-         Median = median , 
-         SD = sd ,
-         R = rhat ,
-         ESS_bulk = ess_bulk , 
-         ESS_tail = ess_tail)
-
-kable(s3_m2_effects, format = "latex", booktabs = TRUE, digits = 2,
-      caption = "Study 3 Posterior Summaries of the BEOI Model")
 
 
 ## Visualization -----------------------------------------------------------
@@ -1047,7 +819,10 @@ n_samples <- sampling |> filter(study=='s1') |> nrow() # 163573
 # Appendix ----------------------------------------------------------------
 
 
-## mean switch rates -------------------------------------------------------
+## Inter-Individual Differences --------------------------------------------
+
+
+### mean switch rates -------------------------------------------------------
 
 plot_ind_switch_mean <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
   filter(phase=='test') |> 
@@ -1099,8 +874,7 @@ ggsave('manuscript/figures/switch_rates_ind_mean.jpg', plot=figure_ind_switch_me
 ggsave('manuscript/figures/switch_rates_ind_mean.eps', plot=figure_ind_switch_mean, units = 'mm', width = 190, height = 190)
 
 
-
-## switch rates = 1 ---------------------------------------------------------
+### switch rates = 1 ---------------------------------------------------------
 
 
 plot_ind_switch_ones <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
@@ -1158,32 +932,195 @@ ggsave('manuscript/figures/switch_rates_ind_ones.eps', plot=figure_ind_switch_on
 
 
 
+## Reduced Switch Rate model -----------------------------------------------------------
+
+
+m2_prior_base <- 
+  # fixed effects
+  ## intercepts (distribution of long-term group)
+  prior(student_t(3, -.75,.5), class = 'Intercept') + # mu: mean over (0,1)
+  prior(normal(1,.5), class = 'Intercept', dpar= 'phi') + # phi: precision over (0,1) 
+  prior(logistic(0,1), class = 'Intercept', dpar='zoi') + # pi: probability of 1
+  # ## slopes (group differences: divergence of short-term from long-term)
+  prior(normal(0,.5), class = 'b', coef = 'Gshort') + # mu: mean over (0,1)
+  prior(normal(0,.25), class = 'b', coef = 'Gshort', dpar= 'phi') + # phi: precision over (0,1) 
+  prior(normal(0,.5), class = 'b', coef = 'Gshort', dpar='zoi') # pi: probability of 1
+
+
+# (base) model
+m2_f_b <- bf(S ~ 1 + G , # mean over (0,1) 
+             phi ~ 1 + G , # precision/variance over (0-1) 
+             zoi ~ 1 + G , # probability of 0 or 1
+             coi ~ 0 + offset(1e2) # (conditional) probability of 1 given 0 or 1
+)
+
+
+### Exp. 1 ------------------------------------------------------------
+
+
+s1_m2_dat <- list(PART = as.factor(s1_choices$part_short) , 
+                  PROB = as.factor(s1_choices$problem) ,
+                  G = as.factor(s1_choices$goal) ,
+                  S = as.double(s1_choices$switch_rate))
+
+s1_m2_b <- brm(m2_f_b , 
+               data=s1_m2_dat , 
+               prior = m2_prior ,
+               family = zero_one_inflated_beta() ,
+               iter = 2000 ,
+               warmup = 1000 ,
+               chains = 6  ,
+               cores = 6 , 
+               file = 'fits/s1_m2_base')
+summary(s1_m2_b)
+pp_check(s1_m2_b)
+mcmc_plot(s1_m2_b, type='trace', variable = "^b_", regex = TRUE)
+s1_m2_b$prior
+
+
+variables(s1_m2_b)
+s1_m2_posts <-  s1_m2_b |>  
+  spread_draws(
+    b_Intercept, b_phi_Intercept, b_zoi_Intercept, # intercepts (long-term effect)
+    b_Gshort , b_phi_Gshort, b_zoi_Gshort # group differences (deviation short- from long-term)
+  )  |>
+  rename(gamma_0_mu = b_Intercept ,
+         gamma_0_phi = b_phi_Intercept ,
+         gamma_0_pi = b_zoi_Intercept ,
+         gamma_1_mu = b_Gshort ,
+         gamma_1_phi = b_phi_Gshort ,
+         gamma_1_pi = b_zoi_Gshort
+  ) |> 
+  mutate(m_long = plogis(gamma_0_pi)+ (1-plogis(gamma_0_pi)) * plogis(gamma_0_mu) , 
+         m_short = plogis(gamma_0_pi+gamma_1_pi)+ (1-plogis(gamma_0_pi+gamma_1_pi)) * plogis(gamma_0_mu+gamma_1_mu) ,
+         m_diff = m_long-m_short
+  ) |> 
+  select(m_long, m_short, m_diff, gamma_0_mu, gamma_0_phi, gamma_0_pi, gamma_1_mu, gamma_1_phi, gamma_1_pi)
+
+s1_m2_effects <- summarise_draws(s1_m2_posts, 
+                                 'mean', 
+                                 ~quantile(.x, probs = 0.025),
+                                 ~quantile(.x, probs = 0.975),
+                                 'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
+  rename(Coefficient = variable , 
+         Mean = mean ,
+         Median = median , 
+         SD = sd ,
+         R = rhat ,
+         ESS_bulk = ess_bulk , 
+         ESS_tail = ess_tail)
+
+kable(s1_m2_effects, format = "latex", booktabs = TRUE, digits = 2,
+      caption = "Study 1 Posterior Summaries of the BEOI Model")
 
 
 
 
+### Exp. 2 ------------------------------------------------------------
+
+s2_m2_b <- brm(m2_f_b , 
+               data=s2_m2_dat , 
+               family = zero_one_inflated_beta() ,
+               chains = 4  ,
+               cores = 4, 
+               file = 'fits/s2_m2_base')
+
+summary(s2_m2_b)
+pp_check(s2_m2_b)
+
+s2_m2_posts <-  s2_m2_b |>  
+  spread_draws(
+    b_Intercept, b_phi_Intercept, b_zoi_Intercept, # intercepts (long-term effect)
+    b_Gshort , b_phi_Gshort, b_zoi_Gshort # group differences (deviation short- from long-term)
+  )  |>
+  rename(gamma_0_mu = b_Intercept ,
+         gamma_0_phi = b_phi_Intercept ,
+         gamma_0_pi = b_zoi_Intercept ,
+         gamma_1_mu = b_Gshort ,
+         gamma_1_phi = b_phi_Gshort ,
+         gamma_1_pi = b_zoi_Gshort
+  ) |> 
+  mutate(m_long = plogis(gamma_0_pi)+ (1-plogis(gamma_0_pi)) * plogis(gamma_0_mu) , 
+         m_short = plogis(gamma_0_pi+gamma_1_pi)+ (1-plogis(gamma_0_pi+gamma_1_pi)) * plogis(gamma_0_mu+gamma_1_mu) ,
+         m_diff = m_long-m_short
+  ) |> 
+  select(m_long, m_short, m_diff, gamma_0_mu, gamma_0_phi, gamma_0_pi, gamma_1_mu, gamma_1_phi, gamma_1_pi) 
+
+s2_m2_effects <- summarise_draws(s2_m2_posts, 
+                                 'mean', 
+                                 ~quantile(.x, probs = 0.025),
+                                 ~quantile(.x, probs = 0.975),
+                                 'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
+  rename(Coefficient = variable , 
+         Mean = mean ,
+         Median = median , 
+         SD = sd ,
+         R = rhat ,
+         ESS_bulk = ess_bulk , 
+         ESS_tail = ess_tail)
+
+kable(s2_m2_effects, format = "latex", booktabs = TRUE, digits = 2,
+      caption = "Study 2 Posterior Summaries of the BEOI Model")
 
 
 
+### Exp. 3 ------------------------------------------------------------
 
+### base model --------------------------------------------------------------
 
+s3_m2_b <- brm(m2_f_b , 
+               data=s3_m2_dat , 
+               family = zero_one_inflated_beta() ,
+               chains = 4  ,
+               cores = 4, 
+               file = 'fits/s3_m2_base')
 
+summary(s3_m2_b)
+pp_check(s3_m2_b)
 
+s3_m2_posts <-  s3_m2_b |>  
+  spread_draws(
+    b_Intercept, b_phi_Intercept, b_zoi_Intercept, # intercepts (long-term effect)
+    b_Gshort , b_phi_Gshort, b_zoi_Gshort # group differences (deviation short- from long-term)
+  )  |>
+  rename(gamma_0_mu = b_Intercept ,
+         gamma_0_phi = b_phi_Intercept ,
+         gamma_0_pi = b_zoi_Intercept ,
+         gamma_1_mu = b_Gshort ,
+         gamma_1_phi = b_phi_Gshort ,
+         gamma_1_pi = b_zoi_Gshort
+  ) |> 
+  mutate(m_long = plogis(gamma_0_pi)+ (1-plogis(gamma_0_pi)) * plogis(gamma_0_mu) , 
+         m_short = plogis(gamma_0_pi+gamma_1_pi)+ (1-plogis(gamma_0_pi+gamma_1_pi)) * plogis(gamma_0_mu+gamma_1_mu) ,
+         m_diff = m_long-m_short
+  ) |> 
+  select(m_long, m_short, m_diff, gamma_0_mu, gamma_0_phi, gamma_0_pi, gamma_1_mu, gamma_1_phi, gamma_1_pi) 
 
+s3_m2_effects <- summarise_draws(s3_m2_posts, 
+                                 'mean', 
+                                 ~quantile(.x, probs = 0.025),
+                                 ~quantile(.x, probs = 0.975),
+                                 'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
+  rename(Coefficient = variable , 
+         Mean = mean ,
+         Median = median , 
+         SD = sd ,
+         R = rhat ,
+         ESS_bulk = ess_bulk , 
+         ESS_tail = ess_tail)
 
-
-
-
-
-
-
-
-
+kable(s3_m2_effects, format = "latex", booktabs = TRUE, digits = 2,
+      caption = "Study 3 Posterior Summaries of the BEOI Model")
 
 
 
 
 # additional stuff ----------------------------------------------------------------
+
+
+# switch rate differences -------------------------------------------------
+
+s1_choices |> group_by(goal) |> summarise(mSwitch=mean(switch_rate))
 
 ## accuracy ----------------------------------------------------------------
 
