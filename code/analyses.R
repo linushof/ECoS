@@ -35,6 +35,9 @@ col_names <- c("Coef." ,
                paste0("$\\text{ESS}_{\\text{bulk}}$", footnote_marker_symbol(3, format = "latex")) , 
                "$\\text{ESS}_{\\text{tail}}$")
 
+col_names_pp <- c("Exp.", "Short", "Long", 
+                  paste0("Difference", footnote_marker_symbol(1, format = "latex")))
+
 ## plotting ----------------------------------------------------------------
 
 two_cols <- scico(n=2, begin = .1, end=.9, palette = 'managua')
@@ -367,7 +370,7 @@ make_posts_m2 <- function(m2_fit){
            sigma_v_pi, sigma_v_mu, sigma_v_phi , 
            rho_mu_phi, rho_mu_pi, rho_phi_pi)
 }
-
+post_draws <- 1e3
 
 
 
@@ -376,6 +379,7 @@ s1_m2_dat <- list(PART = as.factor(s1_choices$part_short) ,
                   PROB = as.factor(s1_choices$problem) ,
                   G = as.factor(s1_choices$goal) ,
                   S = as.double(s1_choices$switch_rate))
+s1_m2_newdat <- s1_choices |> distinct(G=goal, PART=part_short, PROB=problem) # for posterior predictions
 
 s1_m2 <- brm(m2_f , 
                 data=s1_m2_dat , 
@@ -388,6 +392,7 @@ s1_m2 <- brm(m2_f ,
                 file = 'fits/s1_m2')
 
 s1_m2_posts <- make_posts_m2(s1_m2)
+s1_m2_post_pred <- s1_m2 |> predicted_draws(newdata=s1_m2_newdat, re_formula=NULL, ndraws=post_draws)
 
 # run additional diagnostics
 # variables(s1_m2_e1)
@@ -402,6 +407,7 @@ s2_m2_dat <- list(PART = as.factor(s2_choices$part_short) ,
                   PROB = as.factor(s2_choices$problem) ,
                   G = as.factor(s2_choices$goal) ,
                   S = as.double(s2_choices$switch_rate))
+s2_m2_newdat <- s2_choices |> distinct(G=goal, PART=part_short, PROB=problem) # for posterior predictions
 
 s2_m2 <- brm(m2_f , 
              data=s2_m2_dat , 
@@ -414,6 +420,7 @@ s2_m2 <- brm(m2_f ,
              file = 'fits/s2_m2')
 
 s2_m2_posts <- make_posts_m2(s2_m2)
+s2_m2_post_pred <- s2_m2 |> predicted_draws(newdata=s2_m2_newdat, re_formula=NULL, ndraws=post_draws)
 
 ## Exp. 3 ------------------------------------------------------------------
 s3_choices_t <- s3_choices |> filter(phase=='test')
@@ -421,6 +428,7 @@ s3_m2_dat <- list(PART = as.factor(s3_choices_t$part_short) ,
                   PROB = as.factor(s3_choices_t$problem) ,
                   G = as.factor(s3_choices_t$goal) ,
                   S = as.double(s3_choices_t$switch_rate))
+s3_m2_newdat <- s3_choices_t |> distinct(G=goal, PART=part_short, PROB=problem) # for posterior predictions
 
 s3_m2 <- brm(m2_f , 
              data=s3_m2_dat , 
@@ -432,10 +440,23 @@ s3_m2 <- brm(m2_f ,
              cores = 6,
              file = 'fits/s3_m2')
 
-s3_m2_posts <- make_posts_m2(s3_m2)
+s3_m2_posts <- make_posts_m2(s3_m2) # posterior distributions of model parameters
+s3_m2_post_pred <- s3_m2 |> predicted_draws(newdata=s3_m2_newdat, re_formula=NULL, ndraws=post_draws)
+  
+# model-implied posterior predictions
+#tidy_epred <- s3_m2 |> epred_draws(newdata=newdat, re_formula=NULL, ndraws=1e3)
+
+
+# run additional diagnostics
+variables(s3_m2)
+summary(s3_m2)
+pp_check(s3_m2)
+mcmc_plot(s3_m2, type='trace', variable = "^sd_", regex = TRUE)
 
 
 ## Tables ------------------------------------------------------------------
+
+### posterior distributions -------------------------------------------------
 
 make_custom_m2_TeX_table <- function(m2_posts, lower=0.025, upper=0.975,  digits=3){
   
@@ -498,6 +519,52 @@ for(i in seq_along(1:length(posteriors))){
     save_kable(paste0("manuscript/tables/", paste0("s",i,"_m2"),".tex"))
   
 } 
+
+### posterior predictions ---------------------------------------------------
+'summary table for posterior predictions'
+
+# mean posterior prediction and 95% posterior predicted interval
+
+post_preds <- list(s1_m2_post_pred, s2_m2_post_pred, s3_m2_post_pred)
+post_preds_summary <- vector('list', length=length(post_preds))
+
+for(i in seq_along(1:length(post_preds))){ 
+  
+  post_preds_summary[[i]] <- post_preds[[i]] |>
+    group_by(G, .draw) |> 
+    summarise(mean.pred = mean(.prediction)) |>
+    pivot_wider(names_from = G, values_from = mean.pred) |> 
+    mutate(diff=short-long) |> 
+    mean_hdi() |> 
+    mutate(Experiment=i, 
+           Short = paste0(round(short, digits), " [", round(short.lower, digits), ", ", round(short.upper, digits), "]") ,
+           Long = paste0(round(long, digits), " [", round(long.lower, digits), ", ", round(long.upper, digits), "]") , 
+           bold = diff.lower > 0 | diff.upper < 0 ,
+           `(Short-Long)` = if_else(bold, 
+                                    paste0("\\textbf{" , round(diff, digits), " [", round(diff.lower, digits), ", ", round(diff.upper, digits), "]","}" ),
+                                    paste0(round(diff, digits), " [", round(diff.lower, digits), ", ", round(diff.upper, digits), "]"))) |> 
+    select(Experiment, Short, Long, `(Short-Long)`)
+  }
+
+post_preds_table <- bind_rows(post_preds_summary)
+colnames(post_preds_table) <- col_names_pp
+
+post_preds_table |>
+  kbl(format = "latex",
+      booktabs = TRUE,
+      caption = "Average Predicted Switch Rate for the Short-Term Goal and Long-Term Goal Condition",
+      label = paste0("BEOI_pred"),
+      align = c("l", rep("r", 3)),
+      escape = FALSE, 
+      digits=3) |>
+  footnote(general = paste0("Posterior predictions are derived from the hierarchical BEOI model (see Appendix \\\\ref{app:models}) and incorporate participant- and problem-specific random effects. ",
+                            "Values in squared brackets are the lower and upper boundary of the 95\\\\% prediction interval."),
+           general_title = "Note. ",
+           escape = FALSE,
+           threeparttable = TRUE,
+           symbol = c(
+             "Only posterior predicted mean differences with 95\\\\% prediction interval excluding zero are bold.")) |>  
+  save_kable("manuscript/tables/posterior_predictions.tex")
 
 
 ## Figures -----------------------------------------------------------
