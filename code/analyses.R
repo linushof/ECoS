@@ -1,17 +1,17 @@
-# Preparation --------------------------------------------------------------------
+# Preamble --------------------------------------------------------------------
 
 ## packages ----------------------------------------------------------------
 
 pacman::p_load(tidyverse,
                brms, posterior, tidybayes, # Bayes
-               scico, patchwork, ggbeeswarm, # plots
+               scico, patchwork, # plots
                knitr, kableExtra) # tables
 
 ## data --------------------------------------------------------------------
 
-participants_to_exclude <- c('618_4_1', '618_6_20') # did not follow the instructions
-
 problems <- read_csv('data/clean/problems.csv')
+
+participants_to_exclude <- c('618_4_1', '618_6_20') # did not follow the instructions
 
 sampling <- read_csv('data/clean/sampling.csv') |> 
   filter(!participant %in% participants_to_exclude)
@@ -19,11 +19,72 @@ sampling <- read_csv('data/clean/sampling.csv') |>
 choices <- read_csv('data/clean/choices.csv') |> 
   filter(!participant %in% participants_to_exclude) 
 
-s1_choices <- choices |> filter(study=='s1')
-s2_choices <- choices |> filter(study=='s2')
+s1_choices <- choices |> filter(study=='s1') # study = experiment 
+s2_choices <- choices |> filter(study=='s2') 
 s3_choices <- choices |> filter(study=='s3')
 
-## tables ------------------------------------------------------------------
+## LaTeX tables ------------------------------------------------------------------
+
+# functions to compute and format posterior summaries
+
+## M1 (binomial) models
+make_custom_m1_TeX_table <- function(m1_posts, lower=0.025, upper=0.975,  digits=3){
+  
+  m1_posts |> 
+    summarise_draws('mean', 
+                    ~quantile(.x, probs = lower) ,
+                    ~quantile(.x, probs = upper) ,
+                    'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
+    mutate(bold = `2.5%` > 0 | `97.5%` < 0 ,
+           mean = ifelse(bold & variable %in%  c("beta_long", "beta_short", "beta_delta") , paste0("\\textbf{", round(mean,digits), "}"), round(mean, digits)) , 
+           `2.5%` = ifelse(bold & variable %in%  c("beta_long", "beta_short", "beta_delta"), paste0("\\textbf{", round(`2.5%`, digits), "}"), round(`2.5%`,digits)) , 
+           `97.5%` = ifelse(bold& variable %in%  c("beta_long", "beta_short", "beta_delta"), paste0("\\textbf{", round(`97.5%`, digits), "}"), round(`97.5%`,digits)),
+           ess_bulk = round(ess_bulk), 
+           ess_tail = round(ess_tail)) |>
+    select(-bold) |> 
+    rename(Coefficient = variable , 
+           Mean = mean ,
+           Median = median , 
+           SD = sd ,
+           R = rhat ,
+           ESS_bulk = ess_bulk , 
+           ESS_tail = ess_tail)
+  
+}
+
+## M2 (BEOI) models
+make_custom_m2_TeX_table <- function(m2_posts, lower=0.025, upper=0.975,  digits=3){
+  
+  m2_posts |> 
+    summarise_draws('mean', 
+                    ~quantile(.x, probs = lower) ,
+                    ~quantile(.x, probs = upper) ,
+                    'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
+    mutate(bold = `2.5%` > 0 | `97.5%` < 0 ,
+           mean = ifelse(bold & variable %in%  c("gamma_1_pi", "gamma_1_mu", "gamma_1_phi") , 
+                         paste0("\\textbf{", round(mean,digits), "}"), 
+                         round(mean, digits)) , 
+           `2.5%` = ifelse(bold & variable %in%  c("gamma_1_pi", "gamma_1_mu", "gamma_1_phi"), 
+                           paste0("\\textbf{", round(`2.5%`, digits), "}"), 
+                           round(`2.5%`,digits)) , 
+           `97.5%` = ifelse(bold& variable %in%  c("gamma_1_pi", "gamma_1_mu", "gamma_1_phi"), 
+                            paste0("\\textbf{", round(`97.5%`, digits), "}"), 
+                            round(`97.5%`,digits)) ,
+           ess_bulk = round(ess_bulk), 
+           ess_tail = round(ess_tail)) |>
+    select(-bold) |> 
+    rename(Coefficient = variable , 
+           Mean = mean ,
+           Median = median , 
+           SD = sd ,
+           R = rhat ,
+           ESS_bulk = ess_bulk , 
+           ESS_tail = ess_tail)
+  
+}
+
+
+# column (diagnostics) and row (coefficient) names for posterior summary tables 
 
 col_names <- c("Coef." , 
                paste0("Mean", footnote_marker_symbol(1, format = "latex")) , 
@@ -34,16 +95,30 @@ col_names <- c("Coef." ,
                paste0("$\\text{ESS}_{\\text{bulk}}$", footnote_marker_symbol(3, format = "latex")) , 
                "$\\text{ESS}_{\\text{tail}}$")
 
-col_names_pp <- c("Exp.", "Short", "Long", 
-                  paste0("Difference", footnote_marker_symbol(1, format = "latex")))
 
-## plotting ----------------------------------------------------------------
+m1_coef_names <- c("$\\beta_{\\text{long}}$", "$\\beta_{\\text{short}}$", "$\\beta_{\\Delta}$" ,
+                   "$\\beta_0$", "$\\beta_1$", "$\\beta_2$", "$\\beta_3$" , 
+                   "$\\beta_4$", "$\\beta_5$", "$\\beta_6$", "$\\beta_7$" ,
+                   "$\\sigma_u$", "$\\sigma_v$")
+
+
+m2_coef_names <- c("$\\gamma_1^{(\\pi)}$", "$\\gamma_1^{(\\mu)}$", "$\\gamma_1^{(\\phi)}$" ,
+                   "$\\gamma_0^{(\\pi)}$", "$\\gamma_0^{(\\mu)}$", "$\\gamma_0^{(\\phi)}$" ,
+                   "$\\sigma_{u^{(\\pi)}}$", "$\\sigma_{u^{(\\mu)}}$", "$\\sigma_{u^{(\\phi)}}$" ,
+                   "$\\sigma_{v^{(\\pi)}}$", "$\\sigma_{v^{(\\mu)}}$", "$\\sigma_{v^{(\\phi)}}$" ,
+                   "$\\rho_{v^{(\\mu \\phi)}}$", "$\\rho_{v^{(\\mu \\pi)}}$", "$\\rho_{v^{(\\phi \\pi)}}$")
+
+
+digits <- 3 # number of decimal digits to show in tables
+lower <- .025 # lower boundary of CI/PPI
+upper <- .975 # upper boundary
+
+
+## plots ----------------------------------------------------------------
 
 two_cols <- scico(n=2, begin = .1, end=.9, palette = 'managua')
 
-
-
-# Data set -----------------------------------------------------------------
+# Data set summary -----------------------------------------------------------------
 
 ## participants ------------------------------------------------------------
 
@@ -70,55 +145,68 @@ problems |>
   pivot_longer(cols = o1_p1:o2_3 , 
                values_to = 'value',
                names_to = 'feature') |> 
-  separate_wider_delim(
-    feature, delim = '_' ,
-    names = c('option', 'feature')
-  ) |> 
+  separate_wider_delim(feature, 
+                       delim = '_' ,
+                       names = c('option', 'feature')) |> 
   mutate(number = str_extract(feature, '\\d'), 
          feature = if_else(str_detect(feature, 'p'),'probability', 'outcome')) |> 
   pivot_wider(names_from = feature, values_from = value) |> 
   filter(study=='s1', probability!=0) |> 
   summarise(min_out = min(outcome),
-            max_out = max(outcome),
-  )
+            max_out = max(outcome))
 
+## number of observations --------------------------------------------------------------------
 
-## data points --------------------------------------------------------------------
+n_choices <- choices |> filter(study=='s1') |> nrow() 
 
-n_choices <- choices |> filter(study=='s1') |> nrow() # 7320
-n_samples <- sampling |> filter(study=='s1') |> nrow() # 163573
+choices |> 
+  group_by(study) |> 
+  summarise(N = n())
 
+sampling |> 
+  group_by(study) |> 
+  summarise(N=n()) 
 
+# M1 (Binomial): Switch effects -----------------------------------------------------------
 
-# M1: Switch effects (Binomial) -----------------------------------------------------------
+# define linear prediction of the binomial model
 
-# PROB_T is to distinguish problems where long- and short-term are same/different
 m1_f <- bf(C ~ 1 + G*S*PROB_T + (1|PART) + (1|PROB)) 
 
-# priors
-m1_prior <- 
-  # fixed effects
-  ## intercepts
-  prior(student_t(3,.75,.5), class = 'Intercept') + # intercept long-term (diff)
-  prior(student_t(3,.25,.1), class = 'b', coef = 'PROB_TTRUE') + # : dev intercept long-term (same)
-  prior(student_t(3,0,.1), class = 'b', coef = 'Gshort') + # dev intercept short-term (diff)
-  prior(student_t(3,0,.1), class = 'b', coef = 'Gshort:PROB_TTRUE') + # : dev intercept short-term (same)
-  ## slopes
-  prior(normal(0,.5), class = 'b', coef = 'S') + # slope long-term (diff)
-  prior(normal(0,.5), class = 'b', coef = 'Gshort:S') + # dev slope short-term (diff)
-  prior(normal(0,.5), class = 'b', coef = 'S:PROB_TTRUE') + # dev slope long-term (same)
-  prior(normal(0,.5), class = 'b', coef = 'Gshort:S:PROB_TTRUE') # dev slope short-term (same)
+# variables (see below)
+## C: Choice (correct; wrong)
+## G: Goal condition (long; short); long is reference
+## S: Normalized switch rate
+## PROB_T: problem type (diagnostic; non-diagnostic)
+## PART: participant
+## PROB: problem
 
+# define priors for fixed effects (log-odds scale)
+
+m1_prior <- 
+  
+  # intercepts
+  prior(student_t(3,.75,.5), class = 'Intercept') + # long-term intercept (diagnostic problems)
+  prior(student_t(3,.25,.1), class = 'b', coef = 'PROB_TTRUE') + # : offset long-term intercept (non-diagnostic problems)
+  prior(student_t(3,0,.1), class = 'b', coef = 'Gshort') + # offset short-term intercept (diagnostic problems)
+  prior(student_t(3,0,.1), class = 'b', coef = 'Gshort:PROB_TTRUE') + # : offset short-term intercept (non-diagnostic problems)
+  
+  # slopes
+  prior(normal(0,.5), class = 'b', coef = 'S') + # long-term slope (diagnostic)
+  prior(normal(0,.5), class = 'b', coef = 'Gshort:S') + # offset short-term slope (diagnostic)
+  prior(normal(0,.5), class = 'b', coef = 'S:PROB_TTRUE') + # offset long-term slope (non-diagnostic)
+  prior(normal(0,.5), class = 'b', coef = 'Gshort:S:PROB_TTRUE') # offset short-term slope (non-diagnostic)
+
+# custom function to return all MCMC samples (full posterior distribution) of model coefficients and target estimates 
 
 make_posts_m1 <- function(m1_fit){
   m1_fit |> 
-    spread_draws(
-      b_Intercept, b_S, b_Gshort, b_PROB_TTRUE, # main effects
-      `b_Gshort:S` , `b_S:PROB_TTRUE` ,  `b_Gshort:PROB_TTRUE` , # 2-way interaction
-      `b_Gshort:S:PROB_TTRUE`,  # 3-way interaction
-      `sd_PROB__Intercept` , 
-      `sd_PART__Intercept`
-    )  |> 
+    spread_draws(b_Intercept, b_S, b_Gshort, b_PROB_TTRUE, 
+                 `b_Gshort:S` , `b_S:PROB_TTRUE` ,  `b_Gshort:PROB_TTRUE` , 
+                 `b_Gshort:S:PROB_TTRUE`,  
+                 `sd_PROB__Intercept` , # problem-specific random effects
+                 `sd_PART__Intercept`)  |> # participant-specific random effects
+    # coefficient names used in manuscript
     rename(beta_0 = b_Intercept , 
            beta_1 = b_Gshort ,
            beta_2 = b_S , 
@@ -128,8 +216,7 @@ make_posts_m1 <- function(m1_fit){
            beta_6 = `b_S:PROB_TTRUE` , 
            beta_7 = `b_Gshort:S:PROB_TTRUE` ,
            sigma_u = `sd_PROB__Intercept` , 
-           sigma_v = `sd_PART__Intercept`
-    ) |> 
+           sigma_v = `sd_PART__Intercept`) |> 
     mutate(beta_long = beta_2 , 
            beta_short = beta_2 + beta_3 , 
            beta_delta = beta_3) |> 
@@ -141,6 +228,7 @@ make_posts_m1 <- function(m1_fit){
 ## Exp. 1 -----------------------------------------------------------------
 
 # data
+
 s1_m1_dat <- list(PART = as.factor(s1_choices$part_short) , 
                   PROB = as.factor(s1_choices$problem) , 
                   PROB_T = s1_choices$problem_type , 
@@ -160,7 +248,13 @@ s1_m1 <- brm(m1_f ,
              file='fits/s1_m1')
 s1_m1_posts <- make_posts_m1(s1_m1)
 
+'
+Model performance / diagnostics can be checked, e.g., using:
 
+pp_check(s1_m1, ndraws=100) # posterior predictive check
+mcmc_plot(s1_m1, type="trace", variable = "^b_", regex = TRUE) # traceplots
+
+'
 
 ## Exp. 2 -----------------------------------------------------------------
 
@@ -206,34 +300,6 @@ s3_m1 <- brm(m1_f ,
 s3_m1_posts <- make_posts_m1(s3_m1)
 
 ## Tables ------------------------------------------------------------------
-
-make_custom_m1_TeX_table <- function(m1_posts, lower=0.025, upper=0.975,  digits=3){
-  
-  m1_posts |> 
-    summarise_draws('mean', 
-                    ~quantile(.x, probs = lower) ,
-                    ~quantile(.x, probs = upper) ,
-                    'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
-    mutate(bold = `2.5%` > 0 | `97.5%` < 0 ,
-           mean = ifelse(bold & variable %in%  c("beta_long", "beta_short", "beta_delta") , paste0("\\textbf{", round(mean,digits), "}"), round(mean, digits)) , 
-           `2.5%` = ifelse(bold & variable %in%  c("beta_long", "beta_short", "beta_delta"), paste0("\\textbf{", round(`2.5%`, digits), "}"), round(`2.5%`,digits)) , 
-           `97.5%` = ifelse(bold& variable %in%  c("beta_long", "beta_short", "beta_delta"), paste0("\\textbf{", round(`97.5%`, digits), "}"), round(`97.5%`,digits))) |>
-    select(-bold) |> 
-    rename(Coefficient = variable , 
-           Mean = mean ,
-           Median = median , 
-           SD = sd ,
-           R = rhat ,
-           ESS_bulk = ess_bulk , 
-           ESS_tail = ess_tail)
-  
-}
-
-m1_coef_names <- c("$\\beta_{\\text{long}}$", "$\\beta_{\\text{short}}$", "$\\beta_{\\Delta}$" ,
-                   "$\\beta_0$", "$\\beta_1$", "$\\beta_2$", "$\\beta_3$" , 
-                   "$\\beta_4$", "$\\beta_5$", "$\\beta_6$", "$\\beta_7$" ,
-                   "$\\sigma_u$", "$\\sigma_v$")
-
 
 posteriors <- list(s1_m1_posts, s2_m1_posts, s3_m1_posts)
 for(i in seq_along(1:length(posteriors))){
@@ -322,7 +388,6 @@ s3_m1_preds <- s3_m1_posts |>
          prior = as.factor('Informative'))
 
 
-
 m1_figure <- bind_rows(s1_m1_preds, s2_m1_preds, s3_m1_preds) |> 
   ggplot(aes(S_tilde,m, color = goal, fill=goal)) + 
   facet_wrap(~factor(experiment, levels = c('s1', 's2', 's3'), labels=c('Exp. 1', 'Exp. 2', 'Exp. 3')), scales='free_x', drop=T) +
@@ -337,20 +402,28 @@ m1_figure <- bind_rows(s1_m1_preds, s2_m1_preds, s3_m1_preds) |>
   scale_color_scico_d(palette='managua', begin=.1, end=.9) +
   scale_fill_scico_d(palette='managua', begin=.1, end=.9)
 
-m1_figure
 
 ggsave('manuscript/figures/switch_effects.jpg', plot=m1_figure, units = 'mm', width = 190, height = 190*.4)
 ggsave('manuscript/figures/switch_effects.eps', plot=m1_figure, units = 'mm', width = 190, height = 190*.4)
 
 
+# M2 (BEOI): Switch behavior -----------------------------------------------------
 
-# M2: Switch behavior (BEOI) -----------------------------------------------------
+## Full model (with random effects) ----------------------------------------
 
-
+# define linear predictions for the BEOI model components
+# BEOI model is implemented via zero-one-inflated distribution
 m2_f <- bf(S ~ 1 + G + (1 |i| PART) + (1 | PROB)  , 
            phi ~ 1 + G + (1 |i| PART) + (1 | PROB) , 
            zoi ~ 1 + G + (1 |i| PART) + (1 | PROB) , 
            coi ~ 0 + offset(1e2))
+# mu (1st line): mean of the beta component
+# phi: precision of the beta component
+# zoi (pi): probability of zero or one (zero-one-inflation)
+# coi: conditional probability of one (essentially fixed to 1) 
+
+
+# define prior distributions
 
 m2_prior <- 
   
@@ -358,17 +431,17 @@ m2_prior <-
   
   ## intercepts (distribution of long-term group)
   
-  prior(student_t(3, -.75,.5), class = 'Intercept') + # mu: mean over (0,1)
-  prior(normal(1,.5), class = 'Intercept', dpar= 'phi') + # phi: precision over (0,1) 
-  prior(logistic(0,1), class = 'Intercept', dpar='zoi') + # pi: probability of 1
+  prior(student_t(3, -.75,.5), class = 'Intercept') + # long-term mean over (0,1)
+  prior(normal(1,.5), class = 'Intercept', dpar= 'phi') + # long-term precision over (0,1) 
+  prior(logistic(0,1), class = 'Intercept', dpar='zoi') + # pi: long-term probability of 1
   
   ## slopes (group differences: divergence of short-term from long-term)
   
-  prior(normal(0,.5), class = 'b', coef = 'Gshort') + # mu: mean over (0,1)
-  prior(normal(0,.25), class = 'b', coef = 'Gshort', dpar= 'phi') + # phi: precision over (0,1) 
-  prior(normal(0,.5), class = 'b', coef = 'Gshort', dpar='zoi') + # pi: probability of 1
+  prior(normal(0,.5), class = 'b', coef = 'Gshort') + # short-term offset for mean over (0,1)
+  prior(normal(0,.25), class = 'b', coef = 'Gshort', dpar= 'phi') + # short-term offset for precision over (0,1) 
+  prior(normal(0,.5), class = 'b', coef = 'Gshort', dpar='zoi') + # short-term offset for probability of 1
   
-  # random effects 
+  # (standard deviation of) random effects  
   
   ## participant-specific
   prior(exponential(10), class = 'sd', coef='Intercept', group='PART') + 
@@ -385,17 +458,12 @@ m2_prior <-
 make_posts_m2 <- function(m2_fit){
   
   m2_fit |> 
-    spread_draws(
-      # distribution of long-term condition
-      b_zoi_Intercept, b_Intercept, b_phi_Intercept , 
-      # deviations of the short-term condition
-      b_zoi_Gshort, b_Gshort, b_phi_Gshort , 
-      # problem-specific random effects
-      sd_PROB__zoi_Intercept, sd_PROB__Intercept, sd_PROB__phi_Intercept , 
-      # participant-specific random effects
-      sd_PART__zoi_Intercept, sd_PART__Intercept, sd_PART__phi_Intercept ,
-      # correlations between participant-specific random effects
-      cor_PART__Intercept__phi_Intercept, cor_PART__Intercept__zoi_Intercept, cor_PART__phi_Intercept__zoi_Intercept)  |> 
+    spread_draws(b_zoi_Intercept, b_Intercept, b_phi_Intercept , 
+                 b_zoi_Gshort, b_Gshort, b_phi_Gshort , 
+                 sd_PROB__zoi_Intercept, sd_PROB__Intercept, sd_PROB__phi_Intercept , 
+                 sd_PART__zoi_Intercept, sd_PART__Intercept, sd_PART__phi_Intercept ,
+                 cor_PART__Intercept__phi_Intercept, cor_PART__Intercept__zoi_Intercept, cor_PART__phi_Intercept__zoi_Intercept)  |> 
+    # coefficient names used in manuscript
     rename(gamma_0_pi = b_zoi_Intercept , 
            gamma_0_mu = b_Intercept , 
            gamma_0_phi = b_phi_Intercept ,
@@ -417,44 +485,89 @@ make_posts_m2 <- function(m2_fit){
            sigma_v_pi, sigma_v_mu, sigma_v_phi , 
            rho_mu_phi, rho_mu_pi, rho_phi_pi)
 }
+
+# number of draws from the (joint) posterior distribution for posterior predictive checks
 post_draws <- 1e3
 
 
+## Reduced model (without random effects) ----------------------------------
+
+m2_reduced_f <- bf(S ~ 1 + G , 
+                   phi ~ 1 + G , 
+                   zoi ~ 1 + G , 
+                   coi ~ 0 + offset(1e2))
+
+m2_reduced_prior <- 
+  prior(student_t(3, -.75,.5), class = 'Intercept') + 
+  prior(normal(1,.5), class = 'Intercept', dpar= 'phi') + 
+  prior(logistic(0,1), class = 'Intercept', dpar='zoi') + 
+  prior(normal(0,.5), class = 'b', coef = 'Gshort') + 
+  prior(normal(0,.25), class = 'b', coef = 'Gshort', dpar= 'phi') +  
+  prior(normal(0,.5), class = 'b', coef = 'Gshort', dpar='zoi') 
+
+
+make_posts_m2_reduced <- function(m2_reduced_fit){
+  
+  m2_reduced_fit |> 
+    spread_draws(
+      # distribution of long-term condition
+      b_zoi_Intercept, b_Intercept, b_phi_Intercept , 
+      # deviations of the short-term condition
+      b_zoi_Gshort, b_Gshort, b_phi_Gshort)  |> 
+    rename(gamma_0_pi = b_zoi_Intercept , 
+           gamma_0_mu = b_Intercept , 
+           gamma_0_phi = b_phi_Intercept ,
+           gamma_1_pi = b_zoi_Gshort , 
+           gamma_1_mu = b_Gshort , 
+           gamma_1_phi = b_phi_Gshort) |> 
+    select(gamma_1_pi, gamma_1_mu, gamma_1_phi , 
+           gamma_0_pi, gamma_0_mu, gamma_0_phi)
+}
+
 
 ## Exp. 1 ------------------------------------------------------------
+
 s1_m2_dat <- list(PART = as.factor(s1_choices$part_short) , 
                   PROB = as.factor(s1_choices$problem) ,
                   G = as.factor(s1_choices$goal) ,
                   S = as.double(s1_choices$switch_rate))
-s1_m2_newdat <- s1_choices |> distinct(G=goal, PART=part_short, PROB=problem) # for posterior predictions
 
 s1_m2 <- brm(m2_f , 
-                data=s1_m2_dat , 
-                prior = m2_prior ,
-                family = zero_one_inflated_beta() ,
-                iter = 15000 ,
-                warmup = 10000 ,
-                chains = 6  ,
-                cores = 6,
-                file = 'fits/s1_m2')
-
+             data=s1_m2_dat , 
+             prior = m2_prior ,
+             family = zero_one_inflated_beta() ,
+             iter = 15000 ,
+             warmup = 10000 ,
+             chains = 6  ,
+             cores = 6,
+             file = 'fits/s1_m2')
 s1_m2_posts <- make_posts_m2(s1_m2)
-s1_m2_post_pred <- s1_m2 |> predicted_draws(newdata=s1_m2_newdat, re_formula=NULL, ndraws=post_draws)
 
-# run additional diagnostics
-# variables(s1_m2_e1)
-# summary(s1_m2_e1)
-# pp_check(s1_m2_e1)
-# mcmc_plot(s1_m2_e1, type='trace', variable = "^b_", regex = TRUE)
-# s1_m2_e1$prior
+# generate posterior predictions (for the observed sample) to obtain model-implied switch rates
+s1_m2_newdat <- s1_choices |> 
+  distinct(G=goal, PART=part_short, PROB=problem) # makes predictions for the observed sample 
+s1_m2_post_pred <- s1_m2 |> 
+  predicted_draws(newdata=s1_m2_newdat , 
+                  re_formula=NULL, # takes random effects into account 
+                  ndraws=post_draws)
 
+s1_m2_reduced <- brm(m2_reduced_f ,
+                     data=s1_m2_dat , 
+                     prior = m2_reduced_prior ,
+                     family = zero_one_inflated_beta() ,
+                     iter = 2000 ,
+                     warmup = 1000 ,
+                     chains = 6  ,
+                     cores = 6 , 
+                     file = 'fits/s1_m2_reduced')
+s1_m2_reduced_posts <- make_posts_m2_reduced(s1_m2_reduced)
 
 ## Exp. 2 ------------------------------------------------------------------
+
 s2_m2_dat <- list(PART = as.factor(s2_choices$part_short) , 
                   PROB = as.factor(s2_choices$problem) ,
                   G = as.factor(s2_choices$goal) ,
                   S = as.double(s2_choices$switch_rate))
-s2_m2_newdat <- s2_choices |> distinct(G=goal, PART=part_short, PROB=problem) # for posterior predictions
 
 s2_m2 <- brm(m2_f , 
              data=s2_m2_dat , 
@@ -465,17 +578,30 @@ s2_m2 <- brm(m2_f ,
              chains = 6  ,
              cores = 6,
              file = 'fits/s2_m2')
-
 s2_m2_posts <- make_posts_m2(s2_m2)
+
+s2_m2_newdat <- s2_choices |> distinct(G=goal, PART=part_short, PROB=problem)
 s2_m2_post_pred <- s2_m2 |> predicted_draws(newdata=s2_m2_newdat, re_formula=NULL, ndraws=post_draws)
 
+s2_m2_reduced <- brm(m2_reduced_f ,
+                     data=s2_m2_dat , 
+                     prior = m2_reduced_prior ,
+                     family = zero_one_inflated_beta() ,
+                     iter = 2000 ,
+                     warmup = 1000 ,
+                     chains = 6  ,
+                     cores = 6 , 
+                     file = 'fits/s2_m2_reduced')
+s2_m2_reduced_posts <- make_posts_m2_reduced(s2_m2_reduced)
+
+
 ## Exp. 3 ------------------------------------------------------------------
+
 s3_choices_t <- s3_choices |> filter(phase=='test')
 s3_m2_dat <- list(PART = as.factor(s3_choices_t$part_short) , 
                   PROB = as.factor(s3_choices_t$problem) ,
                   G = as.factor(s3_choices_t$goal) ,
                   S = as.double(s3_choices_t$switch_rate))
-s3_m2_newdat <- s3_choices_t |> distinct(G=goal, PART=part_short, PROB=problem) # for posterior predictions
 
 s3_m2 <- brm(m2_f , 
              data=s3_m2_dat , 
@@ -486,67 +612,75 @@ s3_m2 <- brm(m2_f ,
              chains = 6  ,
              cores = 6,
              file = 'fits/s3_m2')
+s3_m2_posts <- make_posts_m2(s3_m2) 
 
-s3_m2_posts <- make_posts_m2(s3_m2) # posterior distributions of model parameters
+s3_m2_newdat <- s3_choices_t |> distinct(G=goal, PART=part_short, PROB=problem) 
 s3_m2_post_pred <- s3_m2 |> predicted_draws(newdata=s3_m2_newdat, re_formula=NULL, ndraws=post_draws)
   
-# model-implied posterior predictions
-#tidy_epred <- s3_m2 |> epred_draws(newdata=newdat, re_formula=NULL, ndraws=1e3)
-
-
-# run additional diagnostics
-variables(s3_m2)
-summary(s3_m2)
-pp_check(s3_m2)
-mcmc_plot(s3_m2, type='trace', variable = "^sd_", regex = TRUE)
-
+s3_m2_reduced <- brm(m2_reduced_f ,
+                     data=s3_m2_dat , 
+                     prior = m2_reduced_prior ,
+                     family = zero_one_inflated_beta() ,
+                     iter = 2000 ,
+                     warmup = 1000 ,
+                     chains = 6  ,
+                     cores = 6 , 
+                     file = 'fits/s3_m2_reduced')
+s3_m2_reduced_posts <- make_posts_m2_reduced(s3_m2_reduced)
 
 ## Tables ------------------------------------------------------------------
 
 ### posterior distributions -------------------------------------------------
 
-make_custom_m2_TeX_table <- function(m2_posts, lower=0.025, upper=0.975,  digits=3){
+posteriors_full <-  list(s1_m2_posts, s2_m2_posts, s3_m2_posts)
+posteriors_reduced <-  list(s1_m2_reduced_posts, s2_m2_reduced_posts, s3_m2_reduced_posts)
+
+# create custom LaTeX summary table
+# fixed effects of reduced model are printed below fixed effects of full model
+for(i in seq_along(1:3)){
   
-  m2_posts |> 
-    summarise_draws('mean', 
-                    ~quantile(.x, probs = lower) ,
-                    ~quantile(.x, probs = upper) ,
-                    'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
-    mutate(bold = `2.5%` > 0 | `97.5%` < 0 ,
-           mean = ifelse(bold & variable %in%  c("gamma_1_pi", "gamma_1_mu", "gamma_1_phi") , paste0("\\textbf{", round(mean,digits), "}"), round(mean, digits)) , 
-           `2.5%` = ifelse(bold & variable %in%  c("gamma_1_pi", "gamma_1_mu", "gamma_1_phi"), paste0("\\textbf{", round(`2.5%`, digits), "}"), round(`2.5%`,digits)) , 
-           `97.5%` = ifelse(bold& variable %in%  c("gamma_1_pi", "gamma_1_mu", "gamma_1_phi"), paste0("\\textbf{", round(`97.5%`, digits), "}"), round(`97.5%`,digits))) |>
-    select(-bold) |> 
-    rename(Coefficient = variable , 
-           Mean = mean ,
-           Median = median , 
-           SD = sd ,
-           R = rhat ,
-           ESS_bulk = ess_bulk , 
-           ESS_tail = ess_tail)
+  effects_full <- make_custom_m2_TeX_table(posteriors_full[[i]])
+  effects_reduced <- make_custom_m2_TeX_table(posteriors_reduced[[i]]) |> 
+    select(-c(Median, SD, R, ESS_bulk, ESS_tail)) |> 
+    rename(mean_reduced = Mean , 
+           lower_reduced = `2.5%` , 
+           upper_reduced = `97.5%`)
   
-}
-
-m2_coef_names <- c("$\\gamma_1^{(\\pi)}$", "$\\gamma_1^{(\\mu)}$", "$\\gamma_1^{(\\phi)}$" ,
-                   "$\\gamma_0^{(\\pi)}$", "$\\gamma_0^{(\\mu)}$", "$\\gamma_0^{(\\phi)}$" ,
-                   "$\\sigma_{u^{(\\pi)}}$", "$\\sigma_{u^{(\\mu)}}$", "$\\sigma_{u^{(\\phi)}}$" ,
-                   "$\\sigma_{v^{(\\pi)}}$", "$\\sigma_{v^{(\\mu)}}$", "$\\sigma_{v^{(\\phi)}}$" ,
-                   "$\\rho_{v^{(\\mu \\phi)}}$", "$\\rho_{v^{(\\mu \\pi)}}$", "$\\rho_{v^{(\\phi \\pi)}}$")
-
-
-
-posteriors <- list(s1_m2_posts, s2_m2_posts, s3_m2_posts)
-
-for(i in seq_along(1:length(posteriors))){
+  effects_joined <- effects_full |> 
+    left_join(effects_reduced, by=join_by(Coefficient)) |>
+    mutate(Mean = ifelse(str_detect(Coefficient, 'gamma') ,
+                         paste0("\\makecell{", Mean,"\\\\[-8pt]","(",mean_reduced,")}"),
+                         Mean) , 
+           `2.5%` = ifelse(str_detect(Coefficient, 'gamma') ,
+                           paste0("\\makecell{", `2.5%`,"\\\\[-8pt]","(",lower_reduced,")}"),
+                           `2.5%`) ,
+           `97.5%` = ifelse(str_detect(Coefficient, 'gamma') ,
+                            paste0("\\makecell{", `97.5%`,"\\\\[-8pt]","(",upper_reduced,")}"),
+                            `97.5%`) ,
+           Median = ifelse(str_detect(Coefficient, 'gamma') ,
+                           paste0("\\makecell{", round(Median, digits),"\\\\[-8pt]~}"),
+                           round(Median, digits)) , 
+           SD = ifelse(str_detect(Coefficient, 'gamma') ,
+                       paste0("\\makecell{", round(SD, digits),"\\\\[-8pt]~}"),
+                       round(SD, digits)) , 
+           R = ifelse(str_detect(Coefficient, 'gamma') ,
+                      paste0("\\makecell{", round(R, digits),"\\\\[-8pt]~}"),
+                      round(R, digits)) , 
+           ESS_bulk = ifelse(str_detect(Coefficient, 'gamma') ,
+                             paste0("\\makecell{", ESS_bulk,"\\\\[-8pt]~}"),
+                             ESS_bulk) , 
+           ESS_tail = ifelse(str_detect(Coefficient, 'gamma') ,
+                             paste0("\\makecell{", ESS_tail,"\\\\[-8pt]~}"),
+                             ESS_tail)) |> 
+    select(-c(mean_reduced, lower_reduced, upper_reduced))
   
-  effects <- make_custom_m2_TeX_table(posteriors[[i]])
-  effects$Coefficient <- m2_coef_names
-  colnames(effects) <- col_names
+  effects_joined$Coefficient <- m2_coef_names
+  colnames(effects_joined) <- col_names
   
-  effects |>
+  effects_joined |>
     kbl(format = "latex",
         booktabs = TRUE,
-        caption = paste0("Study ", i, " Posterior Summaries of the Full BEOI Model"),
+        caption = paste0("Study ", i, " Posterior Summaries of the BEOI Model"),
         label = paste0("s",i,"_m2"),
         align = c("l", rep("r", 8)),
         escape = FALSE, 
@@ -564,13 +698,12 @@ for(i in seq_along(1:length(posteriors))){
                "Scale reduction factor", 
                "Effective sample size")) |>  
     save_kable(paste0("manuscript/tables/", paste0("s",i,"_m2"),".tex"))
-  
-} 
+}
 
 ### posterior predictions ---------------------------------------------------
 'summary table for posterior predictions'
 
-# mean posterior prediction and 95% posterior predicted interval
+# mean and 95% interval of the group-specific average posterior prediction 
 
 post_preds <- list(s1_m2_post_pred, s2_m2_post_pred, s3_m2_post_pred)
 post_preds_summary <- vector('list', length=length(post_preds))
@@ -579,10 +712,10 @@ for(i in seq_along(1:length(post_preds))){
   
   post_preds_summary[[i]] <- post_preds[[i]] |>
     group_by(G, .draw) |> 
-    summarise(mean.pred = mean(.prediction)) |>
+    summarise(mean.pred = mean(.prediction)) |> # group-specific average prediction for each posterior draw
     pivot_wider(names_from = G, values_from = mean.pred) |> 
     mutate(diff=short-long) |> 
-    mean_hdi() |> 
+    mean_hdi() |> # summarizes average predictions over draws (means, quantiles)
     mutate(Experiment=i, 
            Short = paste0(round(short, digits), " [", round(short.lower, digits), ", ", round(short.upper, digits), "]") ,
            Long = paste0(round(long, digits), " [", round(long.lower, digits), ", ", round(long.upper, digits), "]") , 
@@ -594,39 +727,41 @@ for(i in seq_along(1:length(post_preds))){
   }
 
 post_preds_table <- bind_rows(post_preds_summary)
-colnames(post_preds_table) <- col_names_pp
+colnames(post_preds_table) <- c("Exp.", "Short", "Long", paste0("Difference", footnote_marker_symbol(1, format = "latex")))
 
 post_preds_table |>
   kbl(format = "latex",
       booktabs = TRUE,
-      caption = "Average Predicted Switch Rate for the Short-Term Goal and Long-Term Goal Condition",
+      caption = "Model-Implied Average Switch Rates under the Short-Term Goal vs. Long-Term Goal",
       label = paste0("BEOI_pred"),
       align = c("l", rep("r", 3)),
       escape = FALSE, 
       digits=3) |>
-  footnote(general = paste0("Posterior predictions are derived from the hierarchical BEOI model (see Appendix \\\\ref{app:models}) and incorporate participant- and problem-specific random effects. ",
+  footnote(general = paste0("Posterior predictions for the observed sample are derived from the hierarchical BEOI model (see Appendix \\\\ref{app:models}) ",
+                            "using the estimated participant- and problem-specific random effects (rather than integrating over them or setting them to 0). ",
+                            "For each posterior draw, predictions were averaged within conditions. " ,
+                            "The reported means thus summarize predictions for the sample, but do not correspond to population-average predictions or predictions for a typical group member. " ,
                             "Values in squared brackets are the lower and upper boundary of the 95\\\\% prediction interval."),
            general_title = "Note. ",
            escape = FALSE,
            threeparttable = TRUE,
            symbol = c(
              "Only posterior predicted mean differences with 95\\\\% prediction interval excluding zero are bold.")) |>  
-  save_kable("manuscript/tables/posterior_predictions.tex")
+  save_kable("manuscript/tables/m1_pp.tex")
 
 
 ## Figures -----------------------------------------------------------
 
-### prepare ------------------------------------------------------------
+# prepare data
 
-# data 
-binwidth <- 0.05  # histogram bins are [0, binwidth), [binwidth, 2*binwidth), ...  
+## cut switch rates into bins and count (relative number of) observations in each bin
 
+binwidth <- 0.05
 m2_figure_dat <- choices |> 
-  filter(!(study=='s3' & phase!='test')) |>  # (rm data not used in BEOI model)
+  filter(!(study=='s3' & phase!='test')) |>  # rm (training) data not used in BEOI model
   mutate(bin = cut(switch_rate, breaks = seq(0, 1.05, binwidth) , 
                    include.lowest = T, labels=F, right=F) , 
-         bin.upper = (bin*binwidth)-.001
-         ) |> 
+         bin.upper = (bin*binwidth)-.001) |> 
   group_by(study, goal, bin.upper) |> 
   summarise(n = n()) |> 
   pivot_wider(names_from = goal, values_from = n, values_fill = 0) |>
@@ -634,47 +769,51 @@ m2_figure_dat <- choices |>
          short_rel = short/sum(short) ,
          diff=long_rel - short_rel)
 
+## compute observed switch rate means
+
 m2_figure_means <- choices |> 
   filter(!(study=='s3' & phase!='test')) |>
   group_by(study, goal) |> 
   summarise(m=mean(switch_rate)) |> 
   pivot_wider(names_from = goal, values_from = m)
 
-# labels
+## prepare additional labels
+
+# switch rate=1 border
 label_border <- tibble(study = rep('s1', 2) ,
                        x = c(.91,1.09) ,
                        y = rep(0.18, 2) , 
-                       label = c("S < 1", "S = 1")
-                       )
+                       label = c("S < 1", "S = 1"))
 
+# 'driven by' text
 label_note <- tibble(study = 's1' , 
                      x = (((m2_figure_means[[1,'short']]+m2_figure_means[[1, 'long']])/2) + 1.025)/2 ,
                      y = -.21 , 
-                     label = 'driven by'
-                     )
+                     label = 'driven by')
 
+# 'driven by' circle 
+label_1 <- data.frame(study = "s1", 
+                      x = 1.025,
+                      y = -0.04)
+
+# experiment facets
 label_exp <- c('Exp. 1', 'Exp. 2', 'Exp. 3')
 
-label_1 <- data.frame(
-  study = "s1",   # <-- first facet level
-  x = 1.025,
-  y = -0.04
-)
 
-### plot --------------------------------------------------------------------
+# plot
 
 m2_figure <- m2_figure_dat |> 
   ggplot(aes(x=bin.upper)) + 
   facet_wrap(~factor(study, levels=c('s1', 's2', 's3'), labels=label_exp)) +
   
   # mirror plots
-  geom_bar(aes(y=long_rel, fill=factor(diff>0, labels = c("Short", "Long"))), stat = 'identity', fill=cols[1], alpha = .3, just = 1) +
-  geom_bar(aes(y=-short_rel, fill=factor(diff>0, labels = c("Short", "Long"))), stat = 'identity', fill=cols[2], alpha = .3, just=1) +
+  geom_bar(aes(y=long_rel, fill=factor(diff>0, labels = c("Short", "Long"))), stat = 'identity', fill=two_cols[1], alpha = .3, just = 1) +
+  geom_bar(aes(y=-short_rel, fill=factor(diff>0, labels = c("Short", "Long"))), stat = 'identity', fill=two_cols[2], alpha = .3, just=1) +
   geom_bar(aes(y=diff, fill=factor(diff>0, labels = c("Short", "Long"))), stat='identity', just=1) +
   
-  # condition means
-  geom_segment(data=m2_figure_means, aes(x = long, y = 0, xend = long, yend = -.1), color=cols[1], linewidth = .5, linetype = 'dotted') +
-  geom_segment(data=m2_figure_means, aes(x = short, y = 0, xend = short, yend = -.1), color=cols[2], linewidth = .5, linetype = 'dotted') +
+  # goal condition means
+  geom_segment(data=m2_figure_means, aes(x = long, y = 0, xend = long, yend = -.1), color=two_cols[1], linewidth = .5, linetype = 'dotted') +
+  geom_segment(data=m2_figure_means, aes(x = short, y = 0, xend = short, yend = -.1), color=two_cols[2], linewidth = .5, linetype = 'dotted') +
    
   scale_x_continuous(limits=c(0,1.2), breaks=seq(0,1,length.out=3)) +
   scale_y_continuous(limits=c(-.4,.4)) +
@@ -683,13 +822,13 @@ m2_figure <- m2_figure_dat |>
   scale_fill_scico_d(palette='managua', begin=.9, end=.1) +
   
   # labels 
+  
   theme_bw() +
   labs(x="Switch Rate (S)",
        y="Rel. Frequency",
        fill = "Goal",
        color='Goal') +
   
-  # labels
   geom_segment(data = subset(m2_figure_dat, study == "s1"),
                aes(x = 1, y = .16, xend = .8, yend = .16),
                arrow = arrow(length = unit(0.1, "cm"), type = "closed"),
@@ -702,7 +841,6 @@ m2_figure <- m2_figure_dat |>
                aes(x = 1, y = .15, xend = 1, yend = .17), 
                color="black", linewidth=.3) +
   
-  #annotate("point", x = 1.025, y = -0.04, size = 15, shape = 1, color = "black", stroke=.5) +
   geom_point(data = label_1,
              aes(x = x, y = y),
              size = 15,
@@ -710,28 +848,84 @@ m2_figure <- m2_figure_dat |>
              color = "black",
              stroke = 0.3,
              inherit.aes = FALSE) +
+  
   geom_curve(data = subset(m2_figure_means, study == "s1") ,
-             aes(x = (long+short)/2, y = -.1, xend = 1.025, yend = test[[(nrow(test)/3), ncol(test)]]),
+             aes(x = (long+short)/2, 
+                 y = -.1, 
+                 xend = 1.025, 
+                 yend = m2_figure_dat$diff[m2_figure_dat$study == "s1" & round(m2_figure_dat$bin.upper, 3) == 1.049]),
              color="black", linewidth=.3,
              arrow = arrow(length = unit(0.2, "cm"), type = "closed"))  +
-  geom_text(
-    data = label_border,
-    aes(x = x, y = y, label = label),
-    size=2, 
-    color='black',
-    inherit.aes = FALSE
-  ) + 
-  geom_text(
-    data = label_note,
-    aes(x = x, y = y, label = label),
-    size=2, 
-    color='black',
-    inherit.aes = FALSE
-  ) 
+  
+  geom_text(data = label_border,
+            aes(x = x, y = y, label = label),
+            size=2, 
+            color='black',
+            inherit.aes = FALSE) + 
+  geom_text(data = label_note,
+            aes(x = x, y = y, label = label),
+            size=2, 
+            color='black',
+            inherit.aes = FALSE) 
 
-m2_figure 
 ggsave('manuscript/figures/switch_behavior.jpg', plot=m2_figure, units = 'mm', width = 190, height = 190*.4)
+ggsave('manuscript/figures/switch_behavior.eps', plot=m2_figure, units = 'mm', width = 190, height = 190*.4)
 
+
+
+# Inter-Individual Differences on pi
+
+plot_ind_switch_ones <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
+  filter(phase=='test') |> 
+  mutate(switch1 = switch_rate==1) |> 
+  group_by(study, goal, participant) |> 
+  summarise(trials = sum(switch1)) |> 
+  ungroup() |> 
+  arrange(trials) |> 
+  mutate(participant=factor(participant,participant)) |> 
+  ggplot(aes(x=participant, y=trials, color=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')))) +
+  facet_wrap(~factor(study, levels=c('s1', 's2', 's3'), labels = c('Exp. 1',  'Exp. 2', 'Exp. 3')), nrow=1, scales = 'free') + 
+  geom_segment(aes(x=participant, xend=participant, y=0, yend=trials), size=0.5) +
+  geom_point(size= 1) +
+  coord_flip() +
+  scale_color_manual(values=two_cols) +
+  theme_bw() + 
+  theme(axis.text.y = element_blank(), 
+        axis.ticks.y = element_blank() , 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  labs(x="Participant", 
+       y="Trials with Switch Rate = 1",
+       color="Goal")
+
+
+plot_ind_switch_ones_box <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
+  filter(phase=='test') |> 
+  mutate(switch1 = switch_rate==1) |> 
+  group_by(study, goal, participant) |> 
+  summarise(trials = sum(switch1)) |> 
+  ggplot(aes(x=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')), 
+             y=trials, 
+             fill=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')))) +
+  facet_wrap(~factor(study, levels=c('s1', 's2', 's3'), labels = c('Exp. 1',  'Exp. 2', 'Exp. 3')), nrow=1, scales = 'free') + 
+  geom_boxplot() +
+  #geom_beeswarm(shape=1) +
+  scale_fill_manual(values=two_cols) +
+  theme_bw() +
+  theme(legend.position = 'none') +
+  labs(x="Goal", 
+       y="Trials with Switch Rate = 1",
+       fill="Goal")
+
+
+figure_ind_switch_ones <- plot_ind_switch_ones / plot_ind_switch_ones_box + 
+  plot_layout(guides = 'collect') + 
+  plot_annotation(tag_levels = 'A')
+figure_ind_switch_ones
+
+
+ggsave('manuscript/figures/switch_rates_ind_ones.jpg', plot=figure_ind_switch_ones, units = 'mm', width = 190, height = 190)
+ggsave('manuscript/figures/switch_rates_ind_ones.eps', plot=figure_ind_switch_ones, units = 'mm', width = 190, height = 190)
 
 
 # Complexity -----------------------------------------------------
@@ -739,25 +933,25 @@ ggsave('manuscript/figures/switch_behavior.jpg', plot=m2_figure, units = 'mm', w
 ## M3: Switch effects (binomial) ----------------------------------------------------------
 
 m3_f <- bf(C ~ G*S*CPX + (1|PART) + (1|PROB))
+# CPX: complexity (high complexity is reference level)
 
 m3_prior <- 
-  # fixed effects
   ## intercepts
-  prior(student_t(3,.75,.5), class = 'Intercept') + # intercept long-term (high complexity)
-  prior(student_t(3,.3,.1), class = 'b', coef = 'CPXlow') + # : dev intercept long-term (low complexity)
-  prior(student_t(3,.15,.1), class = 'b', coef = 'CPXmedium') + # : dev intercept long-term (medium complexity)
-  prior(student_t(3,0,.1), class = 'b', coef = 'Gshort') + # dev intercept short-term (diff)
-  prior(student_t(3,0,.1), class = 'b', coef = 'Gshort:CPXlow') + # : dev intercept short-term (low complexity)
-  prior(student_t(3,0,.1), class = 'b', coef = 'Gshort:CPXmedium') + # : dev intercept short-term (medium complexity)
+  prior(student_t(3,.75,.5), class = 'Intercept') + # high-complexity intercept (long term)
+  prior(student_t(3,.3,.1), class = 'b', coef = 'CPXlow') + # low-complexity offset (long term)
+  prior(student_t(3,.15,.1), class = 'b', coef = 'CPXmedium') + # medium-complexity offset (long term)
+  prior(student_t(3,0,.1), class = 'b', coef = 'Gshort') + # short-term offset (high complexity)
+  prior(student_t(3,0,.1), class = 'b', coef = 'Gshort:CPXlow') + # additional short-term offset (low complexity)
+  prior(student_t(3,0,.1), class = 'b', coef = 'Gshort:CPXmedium') + # additional short-term offset (medium complexity)
   ## slopes
-  prior(normal(0,.5), class = 'b', coef = 'S') + # slope long-term (high complexity)
-  prior(normal(0,.5), class = 'b', coef = 'S:CPXlow') + # dev slope long-term (low complexity)
-  prior(normal(0,.5), class = 'b', coef = 'S:CPXmedium') + # dev slope long-term (medium complexity)
-  prior(normal(0,.5), class = 'b', coef = 'Gshort:S') + # dev slope short-term (high complexity)
-  prior(normal(0,.5), class = 'b', coef = 'Gshort:S:CPXlow') + # dev slope short-term (low complexity)
-  prior(normal(0,.5), class = 'b', coef = 'Gshort:S:CPXmedium') # dev slope short-term (medium complexity)
+  prior(normal(0,.5), class = 'b', coef = 'S') + # high-complexity slope (long-term)
+  prior(normal(0,.5), class = 'b', coef = 'S:CPXlow') + # low-complexity slope offset (long term) 
+  prior(normal(0,.5), class = 'b', coef = 'S:CPXmedium') + # medium-complexity slope offset (long-term)
+  prior(normal(0,.5), class = 'b', coef = 'Gshort:S') + # short-term slope offset (high complexity)
+  prior(normal(0,.5), class = 'b', coef = 'Gshort:S:CPXlow') + # additional short-term slope offset (low complexity)
+  prior(normal(0,.5), class = 'b', coef = 'Gshort:S:CPXmedium') # additional short-term slope offset (medium complexity)
 
-s1_choices_diff <- s1_choices |> filter(problem_type==FALSE)
+s1_choices_diff <- s1_choices |> filter(problem_type==FALSE) # use only diagnostic problems
 s1_m3_dat <- list(
   PART = as.factor(s1_choices_diff$part_short) , 
   PROB = as.factor(s1_choices_diff$problem) , 
@@ -780,8 +974,6 @@ s1_m3 <- brm(m3_f ,
          
 ## M4: Switch behavior (BEOI Model) ---------------------------------------------------------------
 
-
-
 m4_f <- bf(S ~ 1 + G*CPX + (1 |i| PART) + (1 | PROB)  , 
            phi ~ 1 + G*CPX + (1 |i| PART) + (1 | PROB) , 
            zoi ~ 1 + G*CPX + (1 |i| PART) + (1 | PROB) , 
@@ -793,27 +985,27 @@ m4_prior <-
   
   ## intercepts (distribution of long-term group)
   
-  prior(student_t(3, -.75,.5), class = 'Intercept') + # mu: mean over (0,1)
-  prior(normal(1,.5), class = 'Intercept', dpar= 'phi') + # phi: precision over (0,1) 
-  prior(logistic(0,1), class = 'Intercept', dpar='zoi') + # pi: probability of 1
+  prior(student_t(3, -.75,.5), class = 'Intercept') + 
+  prior(normal(1,.5), class = 'Intercept', dpar= 'phi') +
+  prior(logistic(0,1), class = 'Intercept', dpar='zoi') + 
   
   ## slopes (divergences from long-term--high complexity)
 
-  ## mu: mean over (0,1)
+  ### mu component: mean over (0,1)
   prior(normal(0,.5), class = 'b', coef = 'Gshort') + 
   prior(normal(0,.5), class = 'b', coef = 'CPXlow') + 
   prior(normal(0,.5), class = 'b', coef = 'CPXmedium') + 
   prior(normal(0,.5), class = 'b', coef = 'Gshort:CPXlow') + 
   prior(normal(0,.5), class = 'b', coef = 'Gshort:CPXmedium') + 
   
-  ## phi: precision over (0,1) 
+  ## phi component: precision over (0,1) 
   prior(normal(0,.25), class = 'b', coef = 'Gshort', dpar= 'phi') + 
   prior(normal(0,.25), class = 'b', coef = 'CPXlow', dpar= 'phi') + 
   prior(normal(0,.25), class = 'b', coef = 'CPXmedium', dpar= 'phi') + 
   prior(normal(0,.25), class = 'b', coef = 'Gshort:CPXlow', dpar= 'phi') + 
   prior(normal(0,.25), class = 'b', coef = 'Gshort:CPXmedium', dpar= 'phi') + 
   
-  ## pi: probability of 1
+  ## pi component: probability of 1
   prior(normal(0,.5), class = 'b', coef = 'Gshort', dpar='zoi') + 
   prior(normal(0,.5), class = 'b', coef = 'CPXlow', dpar= 'zoi') + 
   prior(normal(0,.5), class = 'b', coef = 'CPXmedium', dpar= 'zoi') + 
@@ -833,10 +1025,6 @@ m4_prior <-
   prior(exponential(5), class = 'sd', coef='Intercept', group='PROB', dpar='zoi') +
   prior(exponential(5), class = 'sd', coef='Intercept', group='PROB', dpar='phi') 
 
-
-post_draws <- 1e3
-
-
 s1_m4_dat <- list(PART = as.factor(s1_choices$part_short) , 
                   PROB = as.factor(s1_choices$problem) ,
                   G = as.factor(s1_choices$goal) ,
@@ -854,60 +1042,6 @@ s1_m4 <- brm(m4_f ,
              cores = 6,
              file = 'fits/s1_m4')
 s1_m4_post_pred <- s1_m4 |> predicted_draws(newdata=s1_m4_newdat, re_formula=NULL, ndraws=post_draws)
-
-
-m4_reduced_f <- bf(S ~ 1 + G*CPX  , 
-                   phi ~ 1 + G*CPX , 
-                   zoi ~ 1 + G*CPX , 
-                   coi ~ 0 + offset(1e2))
-
-m4_reduced_prior <- 
-  
-  # fixed effects
-  
-  ## intercepts (distribution of long-term group)
-  
-  prior(student_t(3, -.75,.5), class = 'Intercept') + # mu: mean over (0,1)
-  prior(normal(1,.5), class = 'Intercept', dpar= 'phi') + # phi: precision over (0,1) 
-  prior(logistic(0,1), class = 'Intercept', dpar='zoi') + # pi: probability of 1
-  
-  ## slopes (divergences from long-term--high complexity)
-  
-  ## mu: mean over (0,1)
-  prior(normal(0,.5), class = 'b', coef = 'Gshort') + 
-  prior(normal(0,.5), class = 'b', coef = 'CPXlow') + 
-  prior(normal(0,.5), class = 'b', coef = 'CPXmedium') + 
-  prior(normal(0,.5), class = 'b', coef = 'Gshort:CPXlow') + 
-  prior(normal(0,.5), class = 'b', coef = 'Gshort:CPXmedium') + 
-  
-  ## phi: precision over (0,1) 
-  prior(normal(0,.25), class = 'b', coef = 'Gshort', dpar= 'phi') + 
-  prior(normal(0,.25), class = 'b', coef = 'CPXlow', dpar= 'phi') + 
-  prior(normal(0,.25), class = 'b', coef = 'CPXmedium', dpar= 'phi') + 
-  prior(normal(0,.25), class = 'b', coef = 'Gshort:CPXlow', dpar= 'phi') + 
-  prior(normal(0,.25), class = 'b', coef = 'Gshort:CPXmedium', dpar= 'phi') + 
-  
-  ## pi: probability of 1
-  prior(normal(0,.5), class = 'b', coef = 'Gshort', dpar='zoi') + 
-  prior(normal(0,.5), class = 'b', coef = 'CPXlow', dpar= 'zoi') + 
-  prior(normal(0,.5), class = 'b', coef = 'CPXmedium', dpar= 'zoi') + 
-  prior(normal(0,.5), class = 'b', coef = 'Gshort:CPXlow', dpar= 'zoi') + 
-  prior(normal(0,.5), class = 'b', coef = 'Gshort:CPXmedium', dpar= 'zoi')
-
-
-#s1_m4_reduced_newdat <- s1_choices |> distinct(G=goal, CPX=complexity, PART=part_short, PROB=problem) # for posterior predictions
-
-s1_m4_reduced <- brm(m4_reduced_f , 
-                     data=s1_m4_dat , 
-                     prior = m4_reduced_prior ,
-                     family = zero_one_inflated_beta() ,
-                     iter = 10000 ,
-                     warmup = 8000 ,
-                     chains = 6  ,
-                     cores = 6,
-                     file = 'fits/s1_m4_reduced')
-
-
 
 ## Tables ------------------------------------------------------------------
 
@@ -982,7 +1116,6 @@ s1_m3_effects |>
 
 # switch behavior
 
-  
 m4_differences <- s1_m4_post_pred  |>
   group_by(G, CPX, .draw) |> 
   summarise(mean.pred = mean(.prediction)) |>
@@ -1033,9 +1166,6 @@ m4_differences |>
              "Only posterior predicted mean differences with 95\\\\% prediction interval excluding zero are bold.")) |>  
   save_kable("manuscript/tables/posterior_predictions_cpx.tex")
 
-
-
-
 ## Figures ------------------------------------------------------------------
 
 # switch effects
@@ -1079,7 +1209,6 @@ complexity_SE <- s1_m3_preds |>
 # switch behavior
 
 # data 
-binwidth <- 0.05  # histogram bins are [0, binwidth), [binwidth, 2*binwidth), ...  
 
 complexity_SB_dat <- choices |> 
   filter(study=='s1') |>
@@ -1099,19 +1228,18 @@ complexity_SB_means <- choices |>
   summarise(m=mean(switch_rate)) |> 
   pivot_wider(names_from = goal, values_from = m)
 
+
 # labels
 label_border <- tibble(complexity = rep('low', 2) ,
                        x = c(.91,1.09) ,
                        y = rep(0.18, 2) , 
-                       label = c("S < 1", "S = 1")
-)
+                       label = c("S < 1", "S = 1"))
 
 
-label_1 <- data.frame(
-  study = "low",   # <-- first facet level
-  x = 1.025,
-  y = -0.04
-)
+label_1 <- data.frame(study = "low" ,
+                      x = 1.025 ,
+                      y = -0.04)
+
 
 # plot
 
@@ -1170,18 +1298,16 @@ ggsave('manuscript/figures/complexity.jpg', plot=mixed_figure, units = 'mm', wid
 ggsave('manuscript/figures/complexity.eps', plot=mixed_figure, units = 'mm', width = 190, height = 190*.75)
 
 
-# Training ----------------------------------------------------------------
+# M5: Training ----------------------------------------------------------------
 
-test_dat <- s3_choices |> 
-  mutate(trial2 = case_when(phase=='training1' ~ trial , 
-                            phase=='training2' ~ trial+20, 
-                            phase=='test' ~ trial+40) 
-  ) |> 
-  group_by(goal, trial2) |> 
-  summarise(n = n() , 
-            mean_switch = mean(switch_rate)) |> 
+# determine trial number across all phases and compute mean switch rates within group
+s3_trial_avg <- s3_choices |> 
+  mutate(trial_across = case_when(phase=='training1' ~ trial , 
+                                  phase=='training2' ~ trial+20, 
+                                  phase=='test' ~ trial+40)) |> 
+  group_by(goal, trial_across) |> 
+  summarise(mean_switch = mean(switch_rate)) |> 
   ungroup() 
-
 
 
 scale_min_max <- function(x) {
@@ -1189,319 +1315,70 @@ scale_min_max <- function(x) {
 }
 
 
-m4_dat <- list(
-  G = as.factor(test_dat$goal) ,
-  S = as.double(test_dat$mean_switch),
-  Tr = as.double(scale_min_max(test_dat$trial2))
-)
+m5_dat <- list(G = as.factor(s3_trial_avg$goal) ,
+               S = as.double(s3_trial_avg$mean_switch),
+               Tr = as.double(scale_min_max(s3_trial_avg$trial_across)))
 
-m4_f <- bf(S ~ s(Tr, by=G)) 
+m5_f <- bf(S ~ s(Tr, by=G)) 
+m5 <- brm(m5_f , 
+          data=m5_dat ,
+          iter = 5000 ,
+          warmup = 4000 ,
+          chains=6 ,
+          cores=6 , 
+          control = list(adapt_delta = 0.99),
+          file = 'fits/m5')
 
-m4 <- brm(m4_f , 
-          data=m4_dat ,
-          chains=6,
-          cores=6
-)
+## Figures -----------------------------------------------------------------
 
-m4_2 <- brm(m4_f , 
-            data=m4_dat ,
-            family = Beta(),
-            chains=6,
-            cores=6, 
-            control = list(adapt_delta = 0.95)
-)
+phase_means <- s3_choices |> 
+  group_by(goal, phase) |> 
+  summarise(mean_switch = mean(switch_rate))
+
+m5_boxplot_figure <- s3_choices |>
+  group_by(goal, part_short, phase) |> 
+  summarise(n = n() , 
+            mean_switch = mean(switch_rate)) |> 
+  ungroup() |> 
+  ggplot(aes(x=factor(phase, 
+                      levels=c('training1', 'training2', 'test'),
+                      labels=c("Block 1", "Block 2", "Test")), 
+             y=mean_switch)) + 
+  facet_wrap(~factor(goal, 
+                     levels=c('short', 'long'), 
+                     labels=c('Short', 'Long')), nrow=1) +
+  geom_boxplot(outliers=F) +
+  geom_line(aes(color=factor(goal, 
+                             levels=c('short', 'long'), 
+                             labels=c('Short', 'Long')), group=part_short),
+            linewidth=.3, alpha=.6) +
+  geom_point(data=phase_means, size=1) +
+  geom_line(data=phase_means, aes(group=goal)) +
+  scale_fill_manual(values=rev(two_cols)) +
+  scale_color_manual(values=rev(two_cols)) +
+  labs(x='Phase',
+       y='Mean Switch Rate',
+       color='Goal') +
+  theme_bw() +
+  theme(legend.position = "none")
 
 
-
-summary(m4)          
-pp_check(m4_2)
-
-loo_1 <- loo(m4)
-loo_2 <- loo(m4_2)
-loo_compare(loo_1, loo_2)
-
-
-# visualization
-effects_plot <- conditional_effects(m4_2, effects = "Tr:G")
+effects_plot <- conditional_effects(m5, effects = "Tr:G")
 p <- plot(effects_plot)[[1]]
 
-
-t1 <- (20.5 - 1) / 79
-t2 <- (40.5 - 1) / 79
-
-
-m4_figure <- p + 
-  geom_point(dat=test_dat, aes(x=scale_min_max(trial2), y=mean_switch, color=goal), inherit.aes=F) +
-  geom_vline(xintercept = c(t1,t2), linetype="dashed") +
+m5_splines_figure <- p + 
+  geom_point(dat=s3_trial_avg, aes(x=scale_min_max(trial_across), y=mean_switch, color=goal), inherit.aes=F, size=1) +
+  geom_vline(xintercept = c(((20.5 - 1) / 79), ((40.5 - 1) / 79)), linetype="dashed") +
   scale_color_scico_d(palette = "managua", begin = .1, end = .9) +
   scale_fill_scico_d(palette = "managua", begin = .1, end = .9) +
   labs(x='Trials (scaled)',
-       y='Average Switch Rate') +
+       y='Average Switch Rate',
+       color="Goal", fill="Goal") +
   theme_bw() 
 
-m4_figure
-ggsave('manuscript/figures/switch_rate_change.jpg', plot=m4_figure, units = 'mm', width = 140, height = 140*.60)
-
-# Appendix ----------------------------------------------------------------
-
-
-## Inter-Individual Differences --------------------------------------------
+m5_figure <- (m5_boxplot_figure | m5_splines_figure) + 
+  plot_annotation(tag_levels = 'A') +
+  plot_layout(guides = 'collect', widths = c(2,1), height = c(.9,1))
 
 
-### mean switch rates -------------------------------------------------------
-
-plot_ind_switch_mean <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
-  filter(phase=='test') |> 
-  group_by(study, goal, participant) |>
-  summarise(switchM = mean(switch_rate)) |> 
-  ungroup() |> 
-  arrange(switchM) |> 
-  mutate(participant=factor(participant,participant)) |> 
-  ggplot(aes(x=participant, y=switchM, color=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')))) +
-  facet_wrap(~factor(study, levels=c('s1', 's2', 's3'), labels = c('Exp. 1',  'Exp. 2', 'Exp. 3')), nrow=1, scales = 'free') + 
-  geom_segment(aes(x=participant, xend=participant, y=0, yend=switchM), size=0.5) +
-  geom_point(size= 1) +
-  coord_flip() +
-  scale_color_manual(values=two_cols) +
-  theme_bw() + 
-  theme(axis.text.y = element_blank(), 
-        axis.ticks.y = element_blank() , 
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()) +
-  labs(x="Participant", 
-       y="Mean Switch Rate",
-       color="Goal")
-
-plot_ind_switch_mean_box <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
-  filter(phase=='test') |> 
-  group_by(study, goal, participant) |>
-  summarise(switchM = mean(switch_rate)) |> 
-  ggplot(aes(x=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')), 
-             y=switchM, 
-             fill=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')))) +
-  facet_wrap(~factor(study, levels=c('s1', 's2', 's3'), labels = c('Exp. 1',  'Exp. 2', 'Exp. 3')), nrow=1, scales = 'free') + 
-  geom_boxplot() +
-  #geom_beeswarm(shape=1) +
-  scale_fill_manual(values=two_cols) +
-  theme_bw() +
-  theme(legend.position = 'none') +
-  labs(x="Goal", 
-       y="Mean Switch Rate",
-       fill="Goal")
-
-
-figure_ind_switch_mean <- plot_ind_switch_mean / plot_ind_switch_mean_box + 
-  plot_layout(guides = 'collect') + 
-  plot_annotation(tag_levels = 'A')
-figure_ind_switch_mean
-
-
-ggsave('manuscript/figures/switch_rates_ind_mean.jpg', plot=figure_ind_switch_mean, units = 'mm', width = 190, height = 190)
-ggsave('manuscript/figures/switch_rates_ind_mean.eps', plot=figure_ind_switch_mean, units = 'mm', width = 190, height = 190)
-
-
-### switch rates = 1 ---------------------------------------------------------
-
-
-plot_ind_switch_ones <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
-  filter(phase=='test') |> 
-  mutate(switch1 = switch_rate==1) |> 
-  group_by(study, goal, participant) |> 
-  summarise(trials = sum(switch1)) |> 
-  ungroup() |> 
-  arrange(trials) |> 
-  mutate(participant=factor(participant,participant)) |> 
-  ggplot(aes(x=participant, y=trials, color=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')))) +
-  facet_wrap(~factor(study, levels=c('s1', 's2', 's3'), labels = c('Exp. 1',  'Exp. 2', 'Exp. 3')), nrow=1, scales = 'free') + 
-  geom_segment(aes(x=participant, xend=participant, y=0, yend=trials), size=0.5) +
-  geom_point(size= 1) +
-  coord_flip() +
-  scale_color_manual(values=two_cols) +
-  theme_bw() + 
-  theme(axis.text.y = element_blank(), 
-        axis.ticks.y = element_blank() , 
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank()) +
-  labs(x="Participant", 
-       y="Trials with Switch Rate = 1",
-       color="Goal")
-
-
-
-plot_ind_switch_ones_box <- bind_rows(s1_choices, s2_choices, s3_choices) |> 
-  filter(phase=='test') |> 
-  mutate(switch1 = switch_rate==1) |> 
-  group_by(study, goal, participant) |> 
-  summarise(trials = sum(switch1)) |> 
-  ggplot(aes(x=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')), 
-             y=trials, 
-             fill=factor(goal, levels=c('long', 'short'), labels=c('Long', 'Short')))) +
-  facet_wrap(~factor(study, levels=c('s1', 's2', 's3'), labels = c('Exp. 1',  'Exp. 2', 'Exp. 3')), nrow=1, scales = 'free') + 
-  geom_boxplot() +
-  #geom_beeswarm(shape=1) +
-  scale_fill_manual(values=two_cols) +
-  theme_bw() +
-  theme(legend.position = 'none') +
-  labs(x="Goal", 
-       y="Trials with Switch Rate = 1",
-       fill="Goal")
-
-
-figure_ind_switch_ones <- plot_ind_switch_ones / plot_ind_switch_ones_box + 
-  plot_layout(guides = 'collect') + 
-  plot_annotation(tag_levels = 'A')
-figure_ind_switch_ones
-
-
-ggsave('manuscript/figures/switch_rates_ind_ones.jpg', plot=figure_ind_switch_ones, units = 'mm', width = 190, height = 190)
-ggsave('manuscript/figures/switch_rates_ind_ones.eps', plot=figure_ind_switch_ones, units = 'mm', width = 190, height = 190)
-
-
-
-## Reduced Switch Rate model -----------------------------------------------------------
-
-
-m2_reduced_prior <- 
-  # fixed effects
-  ## intercepts (distribution of long-term group)
-  prior(student_t(3, -.75,.5), class = 'Intercept') + # mu: mean over (0,1)
-  prior(normal(1,.5), class = 'Intercept', dpar= 'phi') + # phi: precision over (0,1) 
-  prior(logistic(0,1), class = 'Intercept', dpar='zoi') + # pi: probability of 1
-  # ## slopes (group differences: divergence of short-term from long-term)
-  prior(normal(0,.5), class = 'b', coef = 'Gshort') + # mu: mean over (0,1)
-  prior(normal(0,.25), class = 'b', coef = 'Gshort', dpar= 'phi') + # phi: precision over (0,1) 
-  prior(normal(0,.5), class = 'b', coef = 'Gshort', dpar='zoi') # pi: probability of 1
-
-
-# (base) model
-m2_reduced_f <- bf(S ~ 1 + G , # mean over (0,1) 
-                   phi ~ 1 + G , # precision/variance over (0-1) 
-                   zoi ~ 1 + G , # probability of 0 or 1
-                   coi ~ 0 + offset(1e2) # (conditional) probability of 1 given 0 or 1
-                   )
-
-make_posts_m2_reduced <- function(m2_reduced_fit){
-  
-  m2_reduced_fit |> 
-    spread_draws(
-      # distribution of long-term condition
-      b_zoi_Intercept, b_Intercept, b_phi_Intercept , 
-      # deviations of the short-term condition
-      b_zoi_Gshort, b_Gshort, b_phi_Gshort)  |> 
-    rename(gamma_0_pi = b_zoi_Intercept , 
-           gamma_0_mu = b_Intercept , 
-           gamma_0_phi = b_phi_Intercept ,
-           gamma_1_pi = b_zoi_Gshort , 
-           gamma_1_mu = b_Gshort , 
-           gamma_1_phi = b_phi_Gshort) |> 
-    select(gamma_1_pi, gamma_1_mu, gamma_1_phi , 
-           gamma_0_pi, gamma_0_mu, gamma_0_phi)
-}
-
-
-
-### Exp. 1 ------------------------------------------------------------
-
-s1_m2_reduced <- brm(m2_reduced_f ,
-                     data=s1_m2_dat , 
-                     prior = m2_reduced_prior ,
-                     family = zero_one_inflated_beta() ,
-                     iter = 2000 ,
-                     warmup = 1000 ,
-                     chains = 6  ,
-                     cores = 6 , 
-                     file = 'fits/s1_m2_reduced')
-s1_m2_reduced_posts <- make_posts_m2_reduced(s1_m2_reduced)
-
-### Exp. 2 ------------------------------------------------------------
-
-
-s2_m2_reduced <- brm(m2_reduced_f ,
-                     data=s2_m2_dat , 
-                     prior = m2_reduced_prior ,
-                     family = zero_one_inflated_beta() ,
-                     iter = 2000 ,
-                     warmup = 1000 ,
-                     chains = 6  ,
-                     cores = 6 , 
-                     file = 'fits/s2_m2_reduced')
-s2_m2_reduced_posts <- make_posts_m2_reduced(s2_m2_reduced)
-
-### Exp. 3 ------------------------------------------------------------
-
-s3_m2_reduced <- brm(m2_reduced_f ,
-                     data=s3_m2_dat , 
-                     prior = m2_reduced_prior ,
-                     family = zero_one_inflated_beta() ,
-                     iter = 2000 ,
-                     warmup = 1000 ,
-                     chains = 6  ,
-                     cores = 6 , 
-                     file = 'fits/s3_m2_reduced')
-s3_m2_reduced_posts <- make_posts_m2_reduced(s3_m2_reduced)
-
-
-### Tables ------------------------------------------------------------------
-
-make_custom_m2_reduced_TeX_table <- function(m2_reduced_posts, lower=0.025, upper=0.975,  digits=3){
-  
-  m2_reduced_posts |> 
-    summarise_draws('mean', 
-                    ~quantile(.x, probs = lower) ,
-                    ~quantile(.x, probs = upper) ,
-                    'median', 'sd', 'rhat', 'ess_bulk', 'ess_tail') |> 
-    mutate(bold = `2.5%` > 0 | `97.5%` < 0 ,
-           mean = ifelse(bold & variable %in%  c("gamma_1_pi", "gamma_1_mu", "gamma_1_phi") , paste0("\\textbf{", round(mean,digits), "}"), round(mean, digits)) , 
-           `2.5%` = ifelse(bold & variable %in%  c("gamma_1_pi", "gamma_1_mu", "gamma_1_phi"), paste0("\\textbf{", round(`2.5%`, digits), "}"), round(`2.5%`,digits)) , 
-           `97.5%` = ifelse(bold& variable %in%  c("gamma_1_pi", "gamma_1_mu", "gamma_1_phi"), paste0("\\textbf{", round(`97.5%`, digits), "}"), round(`97.5%`,digits))) |>
-    select(-bold) |> 
-    rename(Coefficient = variable , 
-           Mean = mean ,
-           Median = median , 
-           SD = sd ,
-           R = rhat ,
-           ESS_bulk = ess_bulk , 
-           ESS_tail = ess_tail)
-  
-}
-
-m2_reduced_coef_names <- m2_coef_names[1:6]
-
-m2_col_names <- c("Coef.", 
-                  paste0("Mean", footnote_marker_symbol(1, format = "latex")), 
-                  paste0("2.5\\%", footnote_marker_symbol(1, format = "latex")), 
-                  paste0("97.5\\%", footnote_marker_symbol(1, format = "latex")), 
-                  "Median", "SD", 
-                  paste0("$\\hat{R}$", footnote_marker_symbol(2, format = "latex")) , 
-                  paste0("$\\text{ESS}_{\\text{bulk}}$", footnote_marker_symbol(3, format = "latex")) , 
-                  "$\\text{ESS}_{\\text{tail}}$")
-
-posteriors <- list(s1_m2_reduced_posts, s2_m2_reduced_posts, s3_m2_reduced_posts)
-
-for(i in seq_along(1:length(posteriors))){
-  
-  effects <- make_custom_m2_reduced_TeX_table(posteriors[[i]])
-  effects$Coefficient <- m2_reduced_coef_names
-  colnames(effects) <- m2_col_names
-  
-  effects |>
-    kbl(format = "latex",
-        booktabs = TRUE,
-        caption = paste0("Study ", i, " Posterior Summaries of the Reduced BEOI Model"),
-        label = paste0("s",i,"_m2_reduced"),
-        align = c("l", rep("r", 8)),
-        escape = FALSE, 
-        digits=3) |>
-    pack_rows("Target estimates", 1, 3, bold=F, italic=T) |>
-    pack_rows("Fixed effects", 4, 6, bold=F, italic=T) |>
-    footnote(general = "",
-             general_title = "Note. ",
-             escape = FALSE,
-             threeparttable = TRUE,
-             symbol = c(
-               "Only \\\\textit{target estimates} with 95\\\\% credible interval excluding zero are bold.", 
-               "Scale reduction factor", 
-               "Effective sample size")) |>  
-    save_kable(paste0("manuscript/tables/", paste0("s",i,"_m2_reduced"),".tex"))
-  
-} 
+ggsave('manuscript/figures/training.jpg', plot=m5_figure, units = 'mm', width = 190, height = 190*.35)
