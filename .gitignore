@@ -7,10 +7,10 @@
 *.aux
 *run.xml
 *.synctex.gz
+*.xlsx
 
 # folders
 manuscript/
-data/raw/
 legacy/
 code/misc/
 
