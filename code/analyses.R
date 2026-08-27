@@ -238,7 +238,7 @@ s1_m1_dat <- list(PART = as.factor(s1_choices$part_short) ,
 
 s1_m1 <- brm(m1_f , 
              data=s1_m1_dat , 
-             prior = s1_m1_prior ,
+             prior = m1_prior ,
              family = bernoulli(link = "logit") ,
              iter = 2000 ,
              warmup = 1000 ,
@@ -289,7 +289,7 @@ s3_m1_dat <- list(PART = as.factor(s3_choices$part_short) ,
 
 s3_m1 <- brm(m1_f ,
              data=s3_m1_dat ,
-             prior = s1_m1_prior ,
+             prior = m1_prior ,
              family = bernoulli(link = "logit") ,
              iter = 2000 ,
              warmup = 1000 ,
@@ -927,7 +927,6 @@ figure_ind_switch_ones
 ggsave('manuscript/figures/switch_rates_ind_ones.jpg', plot=figure_ind_switch_ones, units = 'mm', width = 190, height = 190)
 ggsave('manuscript/figures/switch_rates_ind_ones.eps', plot=figure_ind_switch_ones, units = 'mm', width = 190, height = 190)
 
-
 # Complexity -----------------------------------------------------
 
 ## M3: Switch effects (binomial) ----------------------------------------------------------
@@ -1382,3 +1381,82 @@ m5_figure <- (m5_boxplot_figure | m5_splines_figure) +
 
 
 ggsave('manuscript/figures/training.jpg', plot=m5_figure, units = 'mm', width = 190, height = 190*.35)
+
+
+
+# post hoc 'design analysis' ----------------------------------------------
+
+## inputs -------------------------------------------------------------
+
+design <- tibble(PART=s1_m1_dat$PART , 
+                 PROB=s1_m1_dat$PROB ,
+                 PROB_T=if_else(s1_m1_dat$PROB_T, 1, 0) , 
+                 G=if_else(s1_m1_dat$G=="long", 0,1) , 
+                 S=s1_m1_dat$S)
+                 
+  
+post_samples <-  as_draws_df(s1_m1) |> 
+  select(b_Intercept:sd_PROB__Intercept)
+
+
+
+## simulation --------------------------------------------------------------
+
+nsims <- 2
+sim_dat <- sim_fit <-  vector('list', length = nsims)
+
+set.seed(123)
+params <- post_samples |> slice_sample(n=nsims)
+
+for (i in 1:nsims){ 
+  
+  r_PART <- tibble(PART=unique(s1_m1_dat$PART), 
+                   r_PART = rnorm(length(unique(s1_m1_dat$PART)), mean=0, sd=params[[i,c('sd_PART__Intercept')]])) 
+  
+  r_PROB <- tibble(PROB=unique(s1_m1_dat$PROB), 
+                   r_PROB = rnorm(length(unique(s1_m1_dat$PROB)), mean=0, sd=params[[i,c('sd_PROB__Intercept')]])) 
+  
+  sim_dat[[i]] <- design |>
+    bind_cols(params[i,]) |>
+    mutate(linpred = b_Intercept + b_Gshort*G + b_S*S + b_PROB_TTRUE*PROB_T +
+             `b_Gshort:S`*(G*S) + `b_Gshort:PROB_TTRUE`*(G*PROB_T) + `b_S:PROB_TTRUE`*(S*PROB_T) + 
+             `b_Gshort:S:PROB_TTRUE`*(G*S*PROB_T)) |> 
+    left_join(r_PART, by=join_by(PART)) |> 
+    left_join(r_PROB, by=join_by(PROB)) |> 
+    mutate(prob = plogis(linpred+r_PART+r_PROB) ,
+           C = rbinom(n(), 1, p=prob))
+  
+  
+  sim_dat_brm <- list(PART = sim_dat[[i]]$PART , 
+                      PROB = sim_dat[[i]]$PROB , 
+                      PROB_T = sim_dat[[i]]$PROB_T , 
+                      G = as.factor(if_else(sim_dat[[i]]$G==0, 'long', 'short')) ,
+                      S = sim_dat[[i]]$S ,
+                      C = sim_dat[[i]]$C)
+  
+  time <- system.time({
+    fit <- update(s1_m1 ,
+                  newdata=sim_dat_brm , 
+                  recompile=F  ,
+                  iter = 2000 ,
+                  warmup = 1000 ,
+                  chains = 4 ,
+                  cores = 4)})
+  
+  sim_fit[[i]] <- fit |> 
+    as_draws_df(variable = c('b_Intercept', 'b_Gshort', 
+                             'b_S', 'b_PROB_T',
+                             'b_Gshort:S', 'b_Gshort:PROB_T', 'b_S:PROB_T',
+                             'b_Gshort:S:PROB_T')) |> 
+    select(-c(.chain, .iteration, .draw))
+  
+  res <- quantile(sim_fit[[i]]$`b_Gshort:S`, probs=c(.025,.975))
+  
+  
+  print(paste0('Iteration ',i, ' (', (i/nsims)*100,'%) finished in ', time["elapsed"], ' seconds. ',
+               'Target estimate: ', round(res[1], 3), ' (Lower); ', round(res[2], 3), ' (Upper)' ))
+  
+  }
+
+save(sim_fit, file='fits/PHDA/fits.rds')
+load('fits/PHDA/fits.rds', verbose = T)
