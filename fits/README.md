@@ -1,0 +1,1 @@
+Retrieve stored `brmsfits` from the [latest release](https://github.com/linushof/ECoS/releases) and store files here. Alternatively, rerun analyses (might take some time). 

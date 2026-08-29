@@ -19,6 +19,7 @@ To ensure full reproducibility, recreate the software setup using the following 
 -   Install and select `R version 4.3.3` in `RStudio` under `Tools > Global Options > General`
 -   Download the repo via Fork & Clone or ZIP Download (`<> Code` button) and initialize it as R project
 -   Run `renv::restore()` to install all required packages/dependencies with the same version
--   Rerun analyses
 
-All data sets in the [data folder](https://github.com/linushof/ECoS/tree/main/data) can be reproduced using the code scripts in the [code folder](https://github.com/linushof/sampling-strategies/tree/main/code). You can reproduce all data sets from scratch or just specific data sets. Browse the [documentation](https://github.com/linushof/sampling-strategies/tree/main/documentation) for details about each data set, code script, and relevant file dependencies.
+All results reported in the manuscript can be reproduced using the provided [data/](https://github.com/linushof/ECoS/tree/main/data) and [code/](https://github.com/linushof/ECoS/tree/main/code) files. 
+Use clean data and model fits directly or recreate them using the raw data and code scripts.
+Browse the [documentation](https://github.com/linushof/ECoS/tree/main/documentation) for details.
