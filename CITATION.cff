@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+title: "Materials for Hof, L., Schäfer, J. K., Boschetto, T. A., and Pachur, T. (2026). The Ecological and Cognitive Search Hypothesis. Adaptive Organization of Information Sampling in Experience-Based Risky Choice."
+message: "You are free to use materials from this repository under the CC-BY-4.0 license. If you use the materials, please cite the paper and this repository."
+
+authors:
+  - family-names: "Hof"
+    given-names: "Linus"
+    orcid: "https://orcid.org/0000-0002-2257-2136"
+    
+  - family-names: "Schäfer"
+    given-names: "Julian K."
+
+  - family-names: "Boschetto"
+    given-names: "Tamara A."
+    
+  - family-names: "Pachur"
+    given-names: "Thorsten"
+    orcid: "https://orcid.org/0000-0001-6391-4107"
+    
+repository-code: "https://github.com/linushof/ECoS"
+license: "CC-BY-4.0"
+
+version: "1.0.0"
+date-released: "2026-08-29"
