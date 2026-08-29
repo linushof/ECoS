@@ -1,6 +1,6 @@
 # Ecological and Cognitive Search (ECoS)
 
-<!-- Preprint: <DOI> -->
+[![DOI](https://zenodo.org/badge/1094925147.svg)](https://doi.org/10.5281/zenodo.22163172)
 
 In experience-based decision making under risk, people often actively sample information from the available options before making a choice. 
 The functional role of switching between options during such predecisional sampling, however, remains poorly understood.
