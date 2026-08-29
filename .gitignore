@@ -11,6 +11,7 @@
 *.html
 
 # folders
+PsychoPy/
 manuscript/
 legacy/
 code/misc/
@@ -18,6 +19,7 @@ data/raw/study_1/
 data/raw/study_2/
 data/raw/problems/
 fits/*.rds
+fits.7z
 
 # misc
 .Rproj.user

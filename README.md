@@ -12,14 +12,26 @@ Consistent with ECoS, Experiments 1 and 2 showed that frequent switching was ass
 Moreover, participants switched more frequently when pursuing the short-term goal, indicating adaptive organization of ecological search. 
 Experiment 3 further showed that explicit feedback on goal performance during a training phase selectively increased switching under the short-term goal, highlighting how adaptivity in ecological search can be enhanced.
 
-## How to reproduce this project?
+## How to reproduce the analyses?
 
-To ensure full reproducibility, recreate the software setup using the following steps:
+1. To ensure full reproducibility, recreate the software setup using the following steps:
 
 -   Install and select `R version 4.3.3` in `RStudio` under `Tools > Global Options > General`
 -   Download the repo via Fork & Clone or ZIP Download (`<> Code` button) and initialize it as R project
 -   Run `renv::restore()` to install all required packages/dependencies with the same version
 
-All results reported in the manuscript can be reproduced using the provided [data/](https://github.com/linushof/ECoS/tree/main/data) and [code/](https://github.com/linushof/ECoS/tree/main/code) files. 
-Use clean data and model fits directly or recreate them using the raw data and code scripts.
-Browse the [documentation](https://github.com/linushof/ECoS/tree/main/documentation) for details.
+2. All results reported in the manuscript can be reproduced using the provided [data/](https://github.com/linushof/ECoS/tree/main/data) and [code/](https://github.com/linushof/ECoS/tree/main/code) files. 
+
+- Option 1: Start from the raw data and redo the data pre-processing and model fitting (takes some time). 
+
+    - Retrieve raw data from [latest release](https://github.com/linushof/ECoS/releases) and store subfolders in [data/raw/](https://github.com/linushof/ECoS/tree/main/data/raw)
+    - Source `preprocessing.R` to (over)write data sets in [data/clean/](https://github.com/linushof/ECoS/tree/main/data/clean)
+    - Source `analyses.R` to redo all analyses on clean data, write files in [fits/](https://github.com/linushof/ECoS/tree/main/fits) and create all tables and figures
+
+- Option 2: Start from the clean data and use provided model fits to access results more directly. 
+
+    - Retrieve model fits from [latest release](https://github.com/linushof/ECoS/releases) and store in [fits/](https://github.com/linushof/ECoS/tree/main/fits)
+    - Source `analyses.R` to inspect all analyses outputs and create all tables and figures
+
+
+Browse the [documentation](https://github.com/linushof/ECoS/tree/main/documentation) for details about the files and variables in the data sets.

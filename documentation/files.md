@@ -1,6 +1,6 @@
 ## File Descriptions
 
-### R code 
+### code/ 
 
 
 | File                             | Description                                                                                                    |
@@ -10,8 +10,7 @@
 
 
 
-### Data
-
+### data/
 
 
 | Folder   | Subfolder   | Files                                           | Description                                                                                                                                                                                         | Repository | Release  |
@@ -23,7 +22,8 @@
 |          | `study_2/`  | `#DAY_#SESSION_#MACHINE*_Testing_timestemp.csv` | Individual participants' raw data set from Experiments 2 and 3<br/><br/>`* = blank`: no training (Exp. 2)<br/>`* = _T`: with training (Exp. 3)                                                                                                                                    |            | [x]      |
 |          | `problems/` | `study_*_problems.csv`                          | Description of choice problems used in the practice trials, test trials and the training phase.<br/><br/>`* = 1`: Exp. 2<br/>`* = 2`: Exps. 2 and 3                                                                                                      |            | [x]      |
 
-### `brmsfit`
+
+### fits/
 
 
 | File         | Description                                             | Repository           | Release              |
@@ -33,3 +33,8 @@
 | `s1_m*.rds`  | Models for the complexity analysis of Experiment 1.<br/><br/>`*=3`: Logistic regression model<br/>`*=4`: One-inflated beta model     |                      | [x]                  |
 | `s3_m5.rds`  | Spline model for the training analysis of Experiment 3. |                      | [x]                  |
 
+
+### PsychoPy.7z
+
+Archive containing the three self-contained PsychoPy experiments (`.psyexp` file + materials). 
+Experiments were build and run in the PsychoPy builder version `v.2024.2.4`
