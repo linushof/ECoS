@@ -20,6 +20,7 @@ data/raw/study_2/
 data/raw/problems/
 fits/*.rds
 fits.7z
+data/raw.7z
 
 # misc
 .Rproj.user

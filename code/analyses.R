@@ -1326,7 +1326,7 @@ m5 <- brm(m5_f ,
           chains=6 ,
           cores=6 , 
           control = list(adapt_delta = 0.99),
-          file = 'fits/m5')
+          file = 'fits/s3_m5')
 
 ## Figures -----------------------------------------------------------------
 
@@ -1384,7 +1384,7 @@ ggsave('manuscript/figures/training.jpg', plot=m5_figure, units = 'mm', width = 
 
 
 
-# post hoc 'design analysis' ----------------------------------------------
+# Post-hoc Simulation ----------------------------------------------
 
 ## inputs -------------------------------------------------------------
 
@@ -1402,7 +1402,7 @@ post_samples <-  as_draws_df(s1_m1) |>
 
 ## simulation --------------------------------------------------------------
 
-nsims <- 2
+nsims <- 500
 sim_dat <- sim_fit <-  vector('list', length = nsims)
 
 set.seed(123)
@@ -1458,5 +1458,27 @@ for (i in 1:nsims){
   
   }
 
-save(sim_fit, file='fits/PHDA/fits.rds')
-load('fits/PHDA/fits.rds', verbose = T)
+save(sim_fit, file='fits/s1_m1_post_hoc.rds')
+load('fits/s1_m1_post_hoc.rds', verbose = T)
+
+
+for(i in 1:nsims){ 
+  
+  sim_fit[[i]] <- sim_fit[[i]] |> mutate(iter = i)
+  
+}
+
+all_sims <- sim_fit |> bind_rows()
+
+credible <- all_sims |> 
+  group_by(iter) |> 
+  summarise(l95 = quantile(`b_Gshort:S`, probs=.025, names=F) ,
+            u95 = quantile(`b_Gshort:S`, probs=.975, names=F)) |> 
+  mutate(cred=l95>0) 
+mean(credible$cred) # .828
+
+
+
+
+
+
