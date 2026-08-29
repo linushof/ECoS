@@ -5,8 +5,8 @@
 
 | File                             | Description                                                                                                    |
 |----------------------------------|----------------------------------------------------------------------------------------------------------------|
-| `preprocessing.R`                | Code for reading, merging, and pre-processing the individual participants' raw data sets from data/raw/. <br/><br/> Generates data sets in [data/clean/](https://github.com/linushof/ECoS/tree/main/data/clean).|                                                                                                                         |
-| `analyses.R`                     | Code underlying all descriptive and inferential results (incl. figures and tables) reported in the manuscript. |
+| `preprocessing.R`                | Code for reading, merging, and pre-processing the individual participants' raw data sets from [data/raw/](https://github.com/linushof/ECoS/tree/main/data/raw). Generates data sets in [data/clean/](https://github.com/linushof/ECoS/tree/main/data/clean).|                                                                                                                         |
+| `analyses.R`                     | Code underlying all descriptive and inferential results (incl. figures and tables) reported in the manuscript. Generates model outputs in [fits/](https://github.com/linushof/ECoS/tree/main/fits). |
 
 
 
